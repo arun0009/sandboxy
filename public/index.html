@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sandboxy - Smart API Sandbox</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .header h1 {
+            color: #2c3e50;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        
+        .header p {
+            color: #6c757d;
+            font-size: 1.1rem;
+        }
+        
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+        }
+        
+        .card h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+            font-weight: 600;
+        }
+        
+        .card p {
+            color: #666;
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: background 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-right: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .btn:hover {
+            background: #0056b3;
+        }
+        
+        .status {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        .status h3 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .status-badge.success {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .status-badge.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .api-test {
+            margin-top: 2rem;
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #374151;
+        }
+        
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        textarea {
+            resize: vertical;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+        
+        .response {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .section {
+            margin-top: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .spec-item {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+            background: #f8f9fa;
+        }
+        
+        .spec-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .spec-title {
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .spec-meta {
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+        
+        .endpoints-list {
+            margin-top: 10px;
+        }
+        
+        .endpoint-item {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 8px 12px;
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .method-badge {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .method-get { background: #28a745; }
+        .method-post { background: #007bff; }
+        .method-put { background: #ffc107; color: #212529; }
+        .method-patch { background: #17a2b8; }
+        .method-delete { background: #dc3545; }
+        
+        .tester-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        
+        .response-area {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 20px;
+            margin-top: 15px;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            min-height: 120px;
+            max-height: 400px;
+            overflow-y: auto;
+            border-left: 4px solid #007bff;
+        }
+        
+        .response-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .response-status {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .response-status.success {
+            color: #28a745;
+        }
+        
+        .response-status.error {
+            color: #dc3545;
+        }
+        
+        .response-json {
+            background: #ffffff;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 16px;
+            margin-top: 8px;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            overflow-x: auto;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            position: relative;
+            animation: modalSlideIn 0.3s ease-out;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-content h2 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .modal-content p {
+            color: #666;
+            margin-bottom: 1.5rem;
+        }
+
+        .close {
+            color: #999;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            right: 1rem;
+            top: 1rem;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: #333;
+        }
+
+        .modal .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .modal .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        .modal .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .modal .form-group input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+        }
+
+        .modal button[type="submit"] {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 600;
+            transition: background 0.3s ease;
+            width: 100%;
+        }
+
+        .modal button[type="submit"]:hover {
+            background: #0056b3;
+        }
+        
+        /* Dynamic section styles for accordion behavior */
+        .dynamic-section {
+            margin: 2rem 0;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            border-radius: 8px 8px 0 0;
+        }
+        
+        .section-header h2 {
+            margin: 0;
+            color: #495057;
+            font-size: 1.25rem;
+        }
+        
+        .close-section-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.2s ease;
+        }
+        
+        .close-section-btn:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Sandboxy</h1>
+            <p>Import OpenAPI specs → Get instant mock endpoints → Test with realistic data</p>
+            <div style="background: #e9ecef; padding: 1rem; border-radius: 6px; margin-top: 1rem; color: #495057; font-size: 0.9rem; border-left: 4px solid #007bff;">
+                <strong>How it works:</strong> Upload your OpenAPI/Swagger spec → We create live mock endpoints at <code>/api/mock/*</code> → Test immediately with generated data
+            </div>
+        </div>
+        
+        <div class="cards">
+            <div class="card">
+                <h3>Import API Specs</h3>
+                <p>Upload OpenAPI/Swagger specifications (JSON or YAML) to define your mock APIs</p>
+                <button class="btn" id="import-spec-btn">Import Specification</button>
+                <button class="btn" id="view-specs-btn">View Imported Specs</button>
+            </div>
+            
+            <div class="card">
+                <h3>Mock Server</h3>
+                <p><strong>What:</strong> Runs actual HTTP mock servers from your specs<br>
+                <strong>Why:</strong> Provides real endpoints you can call - handles routing, responses, CORS</p>
+                <button class="btn" id="mockoon-status-btn">Check Status</button>
+            </div>
+            
+            
+            <div class="card">
+                <h3>Monitor & Debug</h3>
+                <p><strong>What:</strong> View API calls, response times, error rates<br>
+                <strong>Why:</strong> Debug issues and understand usage patterns</p>
+                <button class="btn" id="monitor-btn">View Logs</button>
+            </div>
+            
+            <div class="card">
+                <h3>API Tester</h3>
+                <p>Test any endpoint with custom requests and see responses</p>
+                <button class="btn" id="quick-test-btn">Quick Test</button>
+            </div>
+        </div>
+        
+        <div class="status">
+            <h3>System Status</h3>
+            <div class="status-item">
+                <span>Backend Server</span>
+                <span class="status-badge success">Running</span>
+            </div>
+            <div class="status-item">
+                <span>Database</span>
+                <span class="status-badge success">Connected</span>
+            </div>
+            <div class="status-item">
+                <span>Mockoon CLI</span>
+                <span class="status-badge" id="mockoon-status">Checking...</span>
+            </div>
+            <div class="status-item">
+                <span>AI Enhancement</span>
+                <span class="status-badge" id="ai-status">Checking...</span>
+            </div>
+        </div>
+        
+        <!-- Specs List Section -->
+        <div id="specsSection" class="section" style="display: none;">
+            <h2>Imported API Specifications</h2>
+            <div id="specsList"></div>
+        </div>
+        
+        <!-- Endpoint Tester Section -->
+        <div id="testerSection" class="section" style="display: none;">
+            <h2>Quick Endpoint Tester</h2>
+            <div class="tester-form">
+                <div class="form-group">
+                    <label>Method:</label>
+                    <select id="testMethod">
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="PATCH">PATCH</option>
+                        <option value="DELETE">DELETE</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Endpoint Path:</label>
+                    <input type="text" id="testPath" placeholder="e.g., /api/users or /v2/data" value="/">
+                </div>
+                <div class="form-group">
+                    <label>Request Body (JSON):</label>
+                    <textarea id="testBody" placeholder='{ "key": "value" }' rows="4"></textarea>
+                </div>
+                <button class="btn" id="send-test-request-btn">Send Request</button>
+                <button class="btn" id="hide-tester-btn" style="margin-left: 10px; background: #6c757d;">Close</button>
+            </div>
+            <div id="testResponse" class="response-area"></div>
+        </div>
+        
+    </div>
+
+    <!-- Modal for importing specs -->
+    <div id="specModal" class="modal">
+        <div class="modal-content">
+            <span class="close" id="close-modal-btn">&times;</span>
+            <h2>Import API Specification</h2>
+            <p><strong>Supported formats:</strong> JSON, YAML (.yml, .yaml)</p>
+            <form id="specForm">
+                <div class="form-group">
+                    <label for="specName">API Name:</label>
+                    <input type="text" id="specName" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="specFile">Upload File:</label>
+                    <input type="file" id="specFile" accept=".json,.yaml,.yml">
+                </div>
+                <div class="form-group">
+                    <label for="specUrl">Or URL:</label>
+                    <input type="url" id="specUrl" name="url" placeholder="https://example.com/api-spec.yaml">
+                </div>
+                <button type="submit">Import Specification</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
