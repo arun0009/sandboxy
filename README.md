@@ -51,10 +51,60 @@ A smart, stateful API sandbox that turns your OpenAPI specs into realistic mock 
 
 ## API Endpoints
 
+### Spec Management
 - `POST /api/specs` - Import OpenAPI specification
 - `GET /api/specs` - List all imported specs
-- `POST /api/mock/*` - Dynamic mock endpoints with stateful data
+
+### Mock API Access
+- `GET /api/mock/*` - Dynamic mock endpoints (returns arrays for collections)
+- `POST /api/mock/*` - Create resources with realistic generated data
+- `PUT /api/mock/*` - Update existing resources
+- `DELETE /api/mock/*` - Delete resources
+- `GET /api/mock/{resource}/{id}` - Get specific resource by ID
+
+### Server Management
 - `GET /api/mockoon/*` - Check mock server status and logs
+- `GET /health` - Server health check
+
+## Using Mock APIs via cURL
+
+### 1. Load an OpenAPI Specification
+```bash
+# Load Pet Store API spec
+curl -X POST "http://localhost:3001/api/specs" \
+  -H "Content-Type: application/json" \
+  -d @sample-specs/petstore-api.json
+```
+
+### 2. Access Mock Endpoints
+```bash
+# POST new pet
+curl -X POST "http://localhost:3001/api/mock/pet" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Cooper Jaiswal",
+    "status": "unavailable"
+  }'
+
+# GET specific pet by ID
+curl -X GET "http://localhost:3001/api/mock/pet/19498" \
+  -H "Content-Type: application/json"
+
+# PUT update pet
+curl -X PUT "http://localhost:3001/api/mock/pet/27678" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Cosmo Backer",
+    "status": "sold"
+  }'
+```
+
+### 3. Mock Data Features
+- **Schema-aware**: Generates data matching OpenAPI schema constraints
+- **Stateful**: POST data persists and is returned by GET requests
+- **Realistic**: Uses contextual data generation (pet names, realistic IDs, etc.)
+- **Constraint-compliant**: Respects minLength, maxLength, enums, patterns, etc.
+- **Generic**: Works with any OpenAPI specification, not just Pet Store
 
 ## Contributing
 
