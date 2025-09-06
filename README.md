@@ -17,7 +17,7 @@ A smart, stateful API sandbox that turns your OpenAPI specs into realistic mock 
 
 1. **Install dependencies**:
    ```bash
-   npm run install-all
+   npm install
    ```
 
 2. **Set up environment**:

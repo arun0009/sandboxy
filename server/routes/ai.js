@@ -255,6 +255,28 @@ function generateInsights(usageStats, dataPatterns) {
   }
   
   return insights;
-}
+};
+
+// Check AI service status
+router.get('/status', async (req, res) => {
+  try {
+    const aiAvailable = isAIAvailable();
+    const modes = dataGenerator.getAvailableModes();
+    
+    res.json({
+      aiAvailable,
+      openaiConfigured: !!process.env.OPENAI_API_KEY,
+      openaiModel: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
+      availableModes: modes,
+      defaultMode: dataGenerator.defaultMode
+    });
+  } catch (error) {
+    console.error('AI status check error:', error);
+    res.status(500).json({ 
+      error: 'Failed to check AI status',
+      details: error.message 
+    });
+  }
+});
 
 module.exports = router;
