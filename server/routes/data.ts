@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import { GenerationMode } from '../../types';
+import { GenerationMode } from '../../common/types';
 
 const router = express.Router();
 

@@ -2,7 +2,7 @@
 // Mockoon handles all standard mocking, this adds AI intelligence when available
 
 import OpenAI from 'openai';
-import { OpenAPISchema, GenerationContext, AIEnhancementResult } from '../../types';
+import { OpenAPISchema, GenerationContext, AIEnhancementResult } from '../../common/types';
 
 interface AIScenario {
   id: number;

@@ -1,11 +1,7 @@
-// Simplified data generator - Mockoon handles most data generation
-// This class now focuses only on AI-enhanced data generation
+// Advanced data generator using Faker.js with schema-aware generation
+// This class handles the "advanced" mode generation with realistic, contextual data
 
 import { faker } from '@faker-js/faker';
-
-interface Factory {
-  build: () => any;
-}
 
 interface FormatInfo {
   format: string | null;
@@ -20,72 +16,21 @@ interface TestScenario {
   type: string;
 }
 
-export class AIDataEnhancer {
+export class AdvancedDataGenerator {
   public isAIAvailable: boolean;
-  private userFactory!: Factory;
-  private productFactory!: Factory;
-  private apiResponseFactory!: Factory;
 
   constructor() {
     this.isAIAvailable = this.checkAIAvailability();
-    this.setupFactories();
   }
   
   checkAIAvailability(): boolean {
     return !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== '');
   }
 
-  setupFactories(): void {
-    // User factory with realistic data
-    this.userFactory = {
-      build: () => ({
-        id: faker.string.uuid(),
-        email: faker.internet.email(),
-        firstName: faker.person.firstName(),
-        lastName: faker.person.lastName(),
-        phone: faker.phone.number(),
-        address: faker.location.streetAddress(),
-        createdAt: faker.date.between({ from: new Date('2020-01-01'), to: new Date() }),
-        isActive: faker.datatype.boolean(),
-        role: faker.helpers.arrayElement(['admin', 'user', 'moderator', 'guest'])
-      })
-    };
-    
-    // Product factory
-    this.productFactory = {
-      build: () => ({
-        id: faker.string.uuid(),
-        name: faker.commerce.productName(),
-        slug: faker.lorem.slug(),
-        price: faker.number.float({ min: 10, max: 1000, fractionDigits: 2 }),
-        category: faker.commerce.department(),
-        description: faker.lorem.paragraph(),
-        inStock: faker.datatype.boolean(),
-        tags: faker.lorem.words(3).split(' ')
-      })
-    };
-    
-    // API Response factory
-    this.apiResponseFactory = {
-      build: () => ({
-        success: faker.datatype.boolean({ probability: 0.8 }),
-        message: faker.helpers.arrayElement(['Success', 'Created', 'Updated', 'Deleted', 'Error', 'Not Found']),
-        timestamp: new Date().toISOString(),
-        requestId: faker.string.uuid(),
-        data: null // Will be populated based on context
-      })
-    };
-  }
 
-  // Main generation method using modern libraries
+  // Main generation method - purely schema-driven
   async generateFromSchema(schema: any, context: any = {}): Promise<any> {
     try {
-      // First try factory-based generation for common patterns
-      const factoryResult = this.tryFactoryGeneration(schema, context);
-      if (factoryResult) {
-        return factoryResult;
-      }
-      
       // Enhance schema with format hints and examples for better generation
       const enhancedSchema = this.enhanceSchemaWithFormats(schema, context);
       
@@ -99,53 +44,110 @@ export class AIDataEnhancer {
     }
   }
 
-  private generateFromEnhancedSchema(schema: any): any {
+  private generateFromEnhancedSchema(schema: any, propertyName?: string): any {
     if (!schema) return {};
+    
+    // Handle schema composition (allOf, oneOf, anyOf)
+    if (schema.allOf) {
+      // Merge all schemas and generate from the combined schema
+      const merged = this.mergeSchemas(schema.allOf);
+      return this.generateFromEnhancedSchema(merged, propertyName);
+    }
+    
+    if (schema.oneOf || schema.anyOf) {
+      // Pick one schema randomly
+      const options = schema.oneOf || schema.anyOf;
+      const chosen = faker.helpers.arrayElement(options);
+      return this.generateFromEnhancedSchema(chosen, propertyName);
+    }
+    
+    // Handle $ref (should be resolved by caller, but just in case)
+    if (schema.$ref) {
+      console.warn('Unresolved $ref found:', schema.$ref);
+      return {};
+    }
+    
+    // Handle const values
+    if (schema.const !== undefined) {
+      return schema.const;
+    }
+    
+    // Handle default values
+    if (schema.default !== undefined) {
+      return schema.default;
+    }
+    
+    // Handle examples
+    if (schema.example !== undefined) {
+      return schema.example;
+    }
+    
+    if (schema.examples && Array.isArray(schema.examples) && schema.examples.length > 0) {
+      return faker.helpers.arrayElement(schema.examples);
+    }
+    
+    // Handle enums
+    if (schema.enum && Array.isArray(schema.enum) && schema.enum.length > 0) {
+      return faker.helpers.arrayElement(schema.enum);
+    }
     
     if (schema.type === 'object' && schema.properties) {
       const result: any = {};
+      const required = schema.required || [];
+      
       Object.entries(schema.properties).forEach(([key, prop]: [string, any]) => {
-        result[key] = this.generateFromEnhancedSchema(prop);
+        // Skip readOnly properties in request generation
+        if (prop.readOnly && !required.includes(key)) {
+          return;
+        }
+        
+        // Generate required properties and some optional ones
+        if (required.includes(key) || faker.datatype.boolean({ probability: 0.7 })) {
+          result[key] = this.generateFromEnhancedSchema(prop, key);
+        }
       });
       return result;
     }
     
     if (schema.type === 'array' && schema.items) {
-      const count = faker.number.int({ min: 1, max: 3 });
-      return Array.from({ length: count }, () => this.generateFromEnhancedSchema(schema.items));
+      const minItems = schema.minItems || 1;
+      const maxItems = schema.maxItems || 3;
+      const count = faker.number.int({ min: minItems, max: Math.max(minItems, maxItems) });
+      
+      const items = Array.from({ length: count }, () => 
+        this.generateFromEnhancedSchema(schema.items, propertyName)
+      );
+      
+      // Handle uniqueItems constraint
+      if (schema.uniqueItems && schema.items.type === 'string') {
+        return [...new Set(items)];
+      }
+      
+      return items;
     }
     
-    if (schema.example !== undefined) {
-      return schema.example;
-    }
-    
-    return this.generateSimpleValue(schema);
+    return this.generateSimpleValue(schema, propertyName);
   }
   
-  tryFactoryGeneration(schema: any, context: any): any | null {
-    // Check if this looks like a common pattern we have factories for
-    if (schema.properties) {
-      const props = Object.keys(schema.properties);
-      
-      // User-like object
-      if (props.some(p => ['email', 'firstName', 'lastName', 'name'].includes(p))) {
-        return this.userFactory.build();
-      }
-      
-      // Product-like object
-      if (props.some(p => ['name', 'price', 'category', 'product'].includes(p))) {
-        return this.productFactory.build();
-      }
-      
-      // API response-like object
-      if (props.some(p => ['success', 'message', 'data', 'status'].includes(p))) {
-        const response = this.apiResponseFactory.build();
-        response.data = context.sampleData || {};
-        return response;
-      }
-    }
+  private mergeSchemas(schemas: any[]): any {
+    const merged: any = { type: 'object', properties: {}, required: [] };
     
-    return null;
+    schemas.forEach(schema => {
+      if (schema.type === 'object' && schema.properties) {
+        Object.assign(merged.properties, schema.properties);
+      }
+      if (schema.required) {
+        merged.required = [...new Set([...merged.required, ...schema.required])];
+      }
+      // Merge other schema properties
+      Object.keys(schema).forEach(key => {
+        if (!['properties', 'required', 'type'].includes(key)) {
+          merged[key] = schema[key];
+        }
+      });
+    });
+    
+    return merged;
   }
 
   enhanceSchemaWithFormats(schema: any, context: any): any {
@@ -253,6 +255,8 @@ export class AIDataEnhancer {
         if (name.includes('last')) return faker.person.lastName();
         if (name.includes('company')) return faker.company.name();
         if (name.includes('product')) return faker.commerce.productName();
+        // For generic 'name' fields, use appropriate context
+        if (name === 'name') return faker.person.firstName(); // Good for pets, people, etc.
         return faker.person.fullName();
       }
       if (name.includes('title') || name.includes('job')) return faker.person.jobTitle();
@@ -267,7 +271,13 @@ export class AIDataEnhancer {
       if (name.includes('skill') || name.includes('technology')) return faker.hacker.noun();
       if (name.includes('language') || name.includes('programming')) return faker.helpers.arrayElement(['JavaScript', 'Python', 'Java', 'C++', 'Go', 'Rust']);
       if (name.includes('type') || name.includes('kind')) return faker.person.jobType();
-      if (name.includes('status')) return faker.helpers.arrayElement(['active', 'inactive', 'pending', 'archived']);
+      if (name.includes('status')) {
+        // Context-aware status generation
+        if (propertySchema.enum) {
+          return faker.helpers.arrayElement(propertySchema.enum);
+        }
+        return faker.helpers.arrayElement(['active', 'inactive', 'pending', 'archived']);
+      }
       if (name.includes('priority')) return faker.helpers.arrayElement(['low', 'medium', 'high', 'urgent']);
       if (name.includes('category')) return faker.commerce.department();
       if (name.includes('file') || name.includes('document')) return faker.system.fileName();
@@ -365,16 +375,69 @@ export class AIDataEnhancer {
     
     switch (schema.type) {
       case 'string':
-        // Use property name context for better fallback values
+        // Handle string constraints
+        let value: string;
+        
         if (propertyName) {
           const example = this.generateExampleForProperty(propertyName, schema);
-          if (example) return example;
+          if (example) value = example;
+          else value = faker.lorem.word();
+        } else {
+          value = faker.lorem.word();
         }
-        return faker.lorem.word();
+        
+        // Apply string constraints
+        if (schema.minLength && value.length < schema.minLength) {
+          value = value.padEnd(schema.minLength, 'x');
+        }
+        if (schema.maxLength && value.length > schema.maxLength) {
+          value = value.substring(0, schema.maxLength);
+        }
+        if (schema.pattern) {
+          // For patterns, try to generate a matching string or fallback
+          try {
+            // Simple pattern matching for common cases
+            if (schema.pattern.includes('[0-9]')) {
+              value = faker.string.numeric(schema.minLength || 5);
+            } else if (schema.pattern.includes('[a-zA-Z]')) {
+              value = faker.string.alpha(schema.minLength || 5);
+            }
+          } catch (e) {
+            // Keep the original value if pattern matching fails
+          }
+        }
+        
+        return value;
+        
       case 'number':
-        return faker.number.float({ min: 1, max: 100, fractionDigits: 2 });
+        const min = schema.minimum !== undefined ? schema.minimum : 1;
+        const max = schema.maximum !== undefined ? schema.maximum : 100;
+        let numValue = faker.number.float({ 
+          min: schema.exclusiveMinimum ? min + 0.01 : min,
+          max: schema.exclusiveMaximum ? max - 0.01 : max,
+          fractionDigits: 2 
+        });
+        
+        if (schema.multipleOf) {
+          numValue = Math.round(numValue / schema.multipleOf) * schema.multipleOf;
+        }
+        
+        return numValue;
+        
       case 'integer':
-        return faker.number.int({ min: 1, max: 100 });
+        const intMin = schema.minimum !== undefined ? schema.minimum : 1;
+        const intMax = schema.maximum !== undefined ? schema.maximum : 100;
+        let intValue = faker.number.int({ 
+          min: schema.exclusiveMinimum ? intMin + 1 : intMin,
+          max: schema.exclusiveMaximum ? intMax - 1 : intMax
+        });
+        
+        if (schema.multipleOf) {
+          intValue = Math.round(intValue / schema.multipleOf) * schema.multipleOf;
+        }
+        
+        return intValue;
+        
       case 'boolean':
         return faker.datatype.boolean();
       case 'array':
@@ -396,7 +459,7 @@ export class AIDataEnhancer {
         let scenarioType: string;
         
         if (i === 0) {
-          // First scenario: typical/realistic data using factories when possible
+          // First scenario: typical/realistic data
           scenario = await this.generateFromSchema(schema, { type: 'realistic' });
           scenarioType = 'realistic';
         } else if (i === 1) {
@@ -509,4 +572,4 @@ export class AIDataEnhancer {
   }
 }
 
-export default AIDataEnhancer;
+export default AdvancedDataGenerator;

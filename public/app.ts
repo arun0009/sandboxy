@@ -1,8 +1,9 @@
-import { 
-  APIResponse, 
-  SpecData, 
-  EndpointData, 
-  MockoonStatus, 
+import {
+  APIResponse,
+  SpecData,
+  BackendSpecData,
+  EndpointData,
+  MockoonStatus,
   GenerationModesResponse,
   TestRequestOptions,
   FetchResult,
@@ -22,7 +23,7 @@ import {
   isHTTPMethod,
   TypedEventEmitter,
   SpecId,
-  EndpointPath
+  EndpointPath,
 } from './types.js';
 
 // Event types for the application
@@ -102,7 +103,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
   private viewLogs(): void {
     this.closeAllDynamicSections();
-    
+
     const logsSection = this.createDynamicSection('logsSection', 'System Logs', `
       <div id="logsContent" class="response-area">
         <div class="response-header">
@@ -123,7 +124,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     try {
       const response = await fetch('/api/data/logs');
       const logs = await response.json();
-      
+
       const logsContent = getElementByIdSafe('logsContent', HTMLDivElement);
       if (logsContent) {
         logsContent.innerHTML = this.createResponseHTML('System Logs', logs, 'success');
@@ -137,8 +138,8 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
   }
 
   private async testAPI<T = unknown>(
-    endpoint: EndpointPath, 
-    method: HTTPMethod = 'GET', 
+    endpoint: EndpointPath,
+    method: HTTPMethod = 'GET',
     body?: unknown
   ): Promise<Result<FetchResult<T>>> {
     try {
@@ -150,7 +151,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
         method,
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
       };
 
       if (body && !['GET', 'HEAD', 'DELETE'].includes(method)) {
@@ -163,22 +164,22 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
       const result: FetchResult<T> = {
         status: response.status,
-        data
+        data,
       };
 
       this.displayResponse({
+        success: response.ok,
         status: response.status,
         statusText: response.statusText,
-        data
+        data,
       });
 
-      // Emit event for testing
       this.emit('endpointTested', { method, path: endpoint, result });
 
       return Ok(result);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.displayResponse({ error: errorMessage });
+      this.displayResponse({ success: false, error: errorMessage });
       return Err(error instanceof Error ? error : new Error(errorMessage));
     }
   }
@@ -197,7 +198,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
       try {
         body = JSON.parse(bodyText);
       } catch (e) {
-        this.displayResponse({ error: 'Invalid JSON in request body' });
+        this.displayResponse({ success: false, error: 'Invalid JSON in request body' });
         return;
       }
     }
@@ -207,21 +208,20 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
   private async checkMockoonStatus(): Promise<Result<MockoonStatus>> {
     try {
-      const response = await withTimeout(
-        fetch('/api/mockoon/status'), 
-        this.requestTimeout
-      );
+      const response = await withTimeout(fetch('/api/mockoon/status'), this.requestTimeout);
       const data = await response.json() as MockoonStatus;
 
       this.updateMockoonBadge(data, response.ok);
       this.createMockoonStatusSection(data, response.ok);
-      
-      const status: StatusBadgeType = data.available && data.runningInstances > 0 
-        ? 'success' 
-        : data.available ? 'warning' : 'error';
-      
+
+      const status: StatusBadgeType = data.available && data.runningInstances > 0
+        ? 'success'
+        : data.available
+        ? 'warning'
+        : 'error';
+
       this.emit('statusUpdated', { service: 'mockoon', status });
-      
+
       return Ok(data);
     } catch (error) {
       this.handleMockoonError(error as Error);
@@ -236,13 +236,13 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
     const getBadgeConfig = (status: MockoonStatus, ok: boolean): { text: string; type: StatusBadgeType } => {
       if (!ok) return { text: 'Error', type: 'error' };
-      
+
       if (status.available) {
-        return status.runningInstances > 0 
+        return status.runningInstances > 0
           ? { text: 'Running', type: 'success' }
           : { text: 'Available', type: 'warning' };
       }
-      
+
       return { text: 'Unavailable', type: 'error' };
     };
 
@@ -254,7 +254,9 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
   private createMockoonStatusSection(data: MockoonStatus, isOk: boolean): void {
     let statusSection = getElementByIdSafe('mockoonStatusSection', HTMLDivElement);
     if (!statusSection) {
-      statusSection = this.createDynamicSection('mockoonStatusSection', 'Mockoon Status', 
+      statusSection = this.createDynamicSection(
+        'mockoonStatusSection',
+        'Mockoon Status',
         '<div id="mockoonStatusContent" class="response-area"></div>'
       );
 
@@ -295,7 +297,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
       const badge = getElementByIdSafe('ai-status', HTMLSpanElement);
 
       if (badge) {
-        const aiMode = data.modes?.find(m => m.id === 'ai');
+        const aiMode = data.modes?.find((m: any) => m.id === 'ai');
         if (aiMode?.available) {
           badge.textContent = 'AI + Fallback';
           badge.className = 'status-badge success';
@@ -314,35 +316,58 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
   }
 
   private displayResponse(data: APIResponse, containerId: string = 'testResponse'): void {
-    const container = getElementByIdSafe(containerId, HTMLDivElement) || 
-                     getElementByIdSafe('testResponse', HTMLDivElement);
-    
+    const container = getElementByIdSafe(containerId, HTMLDivElement) || getElementByIdSafe('testResponse', HTMLDivElement);
+
     if (container) {
       container.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
       container.style.display = 'block';
     }
   }
 
-  private loadSpecs(): void {
+  private async loadSpecs(): Promise<void> {
     this.closeAllDynamicSections();
 
     const specsSection = getElementByIdSafe('specsSection', HTMLDivElement);
-    
-    fetch('/api/specs')
-      .then(response => response.json())
-      .then((specs: SpecData[]) => {
-        this.displaySpecs(specs);
+
+    try {
+      const response = await fetch('/api/specs');
+      const result = await response.json() as APIResponse<SpecData[]>;
+      if (result.success && result.data) {
+        this.displaySpecs(result.data);
         if (specsSection) {
           specsSection.style.display = 'block';
           specsSection.style.visibility = 'visible';
         }
-      })
-      .catch(error => {
-        console.error('Error loading specs:', error);
-        if (specsSection) {
-          alert('Failed to load specifications');
+      } else {
+        throw new Error(result.error || 'Failed to load specifications');
+      }
+    } catch (error) {
+      console.error('Error loading specs:', error);
+      if (specsSection) {
+        alert('Failed to load specifications');
+      }
+    }
+  }
+
+  private countEndpoints(spec: any): number {
+    return Object.keys(spec.paths).reduce((count, path) => count + Object.keys(spec.paths[path]).length, 0);
+  }
+
+  private extractEndpoints(spec: any): EndpointData[] {
+    const endpoints: EndpointData[] = [];
+    for (const [path, methods] of Object.entries(spec.paths)) {
+      for (const method of Object.keys(methods as any)) {
+        if (isHTTPMethod(method.toUpperCase())) {
+          endpoints.push({
+            method: method.toUpperCase() as HTTPMethod,
+            path: path as EndpointPath,
+            summary: (methods as any)[method]?.summary,
+            description: (methods as any)[method]?.description,
+          });
         }
-      });
+      }
+    }
+    return endpoints;
   }
 
   private displaySpecs(specs: SpecData[]): void {
@@ -392,11 +417,13 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
     try {
       const response = await fetch(`/api/specs/${specId}`);
-      const spec: SpecData = await response.json();
-      
-      if (spec.endpoints) {
-        this.displayEndpoints([...spec.endpoints], specId);
+      const result = await response.json() as APIResponse<BackendSpecData>;
+      if (result.success && result.data) {
+        const endpoints = this.extractEndpoints(result.data.spec_data);
+        this.displayEndpoints(endpoints, specId);
         endpointsContainer.style.display = 'block';
+      } else {
+        throw new Error(result.error || 'Failed to load specification details');
       }
     } catch (error) {
       console.error('Error loading spec details:', error);
@@ -460,14 +487,18 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     }
 
     if (bodyTextArea && ['POST', 'PUT', 'PATCH'].includes(method)) {
-      bodyTextArea.value = JSON.stringify({
-        "name": "Sample Pet",
-        "status": "available",
-        "category": { "id": 1, "name": "Dogs" },
-        "photoUrls": ["https://example.com/photo1.jpg"],
-        "tags": [{ "id": 1, "name": "friendly" }]
-      }, null, 2);
-      
+      bodyTextArea.value = JSON.stringify(
+        {
+          name: 'Sample Pet',
+          status: 'available',
+          category: { id: 1, name: 'Dogs' },
+          photoUrls: ['https://example.com/photo1.jpg'],
+          tags: [{ id: 1, name: 'friendly' }],
+        },
+        null,
+        2
+      );
+
       bodyTextArea.focus();
       if (responseContainer) {
         responseContainer.innerHTML = this.createReadyToTestHTML('POST');
@@ -508,11 +539,15 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
         const method = methodSelect.value;
         if (['POST', 'PUT', 'PATCH'].includes(method)) {
           if (!bodyTextarea.value.trim()) {
-            bodyTextarea.value = JSON.stringify({
-              "name": "Fluffy",
-              "status": "available",
-              "category": { "id": 1, "name": "Dogs" }
-            }, null, 2);
+            bodyTextarea.value = JSON.stringify(
+              {
+                name: 'Fluffy',
+                status: 'available',
+                category: { id: 1, name: 'Dogs' },
+              },
+              null,
+              2
+            );
           }
         } else {
           bodyTextarea.value = '';
@@ -553,12 +588,10 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     responseContainer.innerHTML = 'Sending request...';
 
     const result = await this.testAPI(path, method, body ? JSON.parse(body) : undefined);
-    
+
     if (result.success) {
       const statusClass: StatusBadgeType = result.data.status >= 200 && result.data.status < 300 ? 'success' : 'error';
-      const formattedJson = typeof result.data.data === 'string' 
-        ? result.data.data 
-        : JSON.stringify(result.data.data, null, 2);
+      const formattedJson = typeof result.data.data === 'string' ? result.data.data : JSON.stringify(result.data.data, null, 2);
 
       responseContainer.innerHTML = `
         <div class="response-header">
@@ -596,12 +629,12 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     const rules: ValidationRule[] = [
       {
         validate: (value: string) => value.trim().length > 0,
-        message: 'Please enter an endpoint path'
+        message: 'Please enter an endpoint path',
       },
       {
         validate: (value: string) => isHTTPMethod(value),
-        message: 'Invalid HTTP method'
-      }
+        message: 'Invalid HTTP method',
+      },
     ];
 
     if (!path.trim()) {
@@ -624,7 +657,6 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
   }
 
   private performSearch(query: string): void {
-    // Implement search functionality with debouncing
     console.log('Searching for:', query);
   }
 
@@ -650,42 +682,69 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
     try {
       let specData: string | undefined;
+      let parsedSpecData: any = undefined;
+      
       if (file) {
         specData = await file.text();
+        
+        // Detect file format and parse accordingly
+        const fileName = file.name.toLowerCase();
+        const isYaml = fileName.endsWith('.yaml') || fileName.endsWith('.yml') || specData.trim().startsWith('openapi:');
+        
+        if (isYaml) {
+          // Send raw YAML string to backend for parsing
+          parsedSpecData = specData;
+        } else {
+          // Parse JSON on frontend
+          parsedSpecData = JSON.parse(specData);
+        }
       }
 
       const response = await withTimeout(
         fetch('/api/specs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, spec: specData, url })
+          body: JSON.stringify({ 
+            spec_name: name, 
+            spec_data: parsedSpecData, 
+            url,
+            is_yaml: file && (file.name.toLowerCase().endsWith('.yaml') || file.name.toLowerCase().endsWith('.yml') || specData?.trim().startsWith('openapi:'))
+          }),
         }),
         this.requestTimeout
       );
 
-      const result = await response.json() as SpecData & { endpointCount: number };
+      const result = await response.json() as APIResponse<BackendSpecData>;
 
-      if (response.ok) {
-        alert(`✅ Specification "${result.name}" imported successfully!\n\n📊 Found ${result.endpointCount} endpoints\n\n💡 Next steps:\n1. Click "View Imported Specs" to see your endpoints\n2. Use "Quick Test" to test individual endpoints\n3. Your endpoints are now available for testing!`);
-        
+      if (response.ok && result.success && result.data) {
+        const spec: SpecData = {
+          id: result.data.spec_id as SpecId,
+          name: result.data.spec_name,
+          version: result.data.spec_data.info.version as any,
+          endpoint_count: this.countEndpoints(result.data.spec_data),
+          created_at: result.data.created_at,
+          endpoints: this.extractEndpoints(result.data.spec_data),
+        };
+
+        alert(
+          `✅ Specification "${spec.name}" imported successfully!\n\n📊 Found ${spec.endpoint_count} endpoints\n\n💡 Next steps:\n1. Click "View Imported Specs" to see your endpoints\n2. Use "Quick Test" to test individual endpoints\n3. Your endpoints are now available for testing!`
+        );
+
         this.closeSpecModal();
-        
+
         const specForm = getElementByIdSafe('specForm', 'form');
         if (specForm) specForm.reset();
-        
-        // Store the imported spec
-        TypedStorage.setItem(`spec-${result.id}`, result);
-        
-        // Emit event
-        this.emit('specImported', result);
-        
+
+        TypedStorage.setItem(`spec-${spec.id}`, spec);
+
+        this.emit('specImported', spec);
+
         this.loadSpecs();
-        return Ok(result);
+        return Ok(spec);
       } else {
-        const errorResult = result as any; // API error response
-        const errorMessage = `❌ Error: ${errorResult.error || 'Unknown error'}\n\nTip: Make sure your file is valid JSON or YAML format`;
+        const errorMessage = `❌ Error: ${result.error || 'Unknown error'}\n\nTip: Make sure your file is valid JSON or YAML format`;
         alert(errorMessage);
-        return Err(new Error(errorResult.error || 'Upload failed'));
+        return Err(new Error(result.error || 'Upload failed'));
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -736,17 +795,6 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     }
   }
 
-  // Utility methods
-  private closeAllDynamicSections(): void {
-    document.querySelectorAll('.dynamic-section').forEach(section => section.remove());
-
-    const testerSection = getElementByIdSafe('testerSection', HTMLDivElement);
-    if (testerSection) testerSection.style.display = 'none';
-
-    const specsSection = getElementByIdSafe('specsSection', HTMLDivElement);
-    if (specsSection) specsSection.style.display = 'none';
-  }
-
   private createDynamicSection(id: string, title: string, content: string): HTMLDivElement {
     const section = document.createElement('div');
     section.id = id;
@@ -783,10 +831,11 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
   }
 
   private createReadyToTestHTML(method: string): string {
-    const message = method === 'POST' 
-      ? '💡 Modify the JSON payload above and click "Send Request" to test this POST endpoint.'
-      : '💡 Click "Send Request" to test this GET endpoint.';
-    
+    const message =
+      method === 'POST'
+        ? '💡 Modify the JSON payload above and click "Send Request" to test this POST endpoint.'
+        : '💡 Click "Send Request" to test this GET endpoint.';
+
     return `
       <div class="response-header">
         <span class="response-status">Ready to Test</span>
@@ -797,7 +846,16 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     `;
   }
 
-  // Public method for global access
+  public closeAllDynamicSections(): void {
+    document.querySelectorAll('.dynamic-section').forEach(section => section.remove());
+
+    const testerSection = getElementByIdSafe('testerSection', HTMLDivElement);
+    if (testerSection) testerSection.style.display = 'none';
+
+    const specsSection = getElementByIdSafe('specsSection', HTMLDivElement);
+    if (specsSection) specsSection.style.display = 'none';
+  }
+
   public closeDynamicSection(sectionId: string): void {
     const section = document.getElementById(sectionId);
     if (section) {
@@ -806,8 +864,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
   }
 }
 
-// Initialize the application
 const apiSandbox = new APISandboxApp();
-
-// Make it globally available for onclick handlers
 (window as any).apiSandbox = apiSandbox;
+
+export default APISandboxApp;

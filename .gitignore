@@ -63,3 +63,11 @@ playwright-report/
 node_modules/
 test-results/
 server/mockoon-data/
+# Compiled JS files should only be in dist/
+*.js
+*.js.map
+!dist/**/*.js
+!dist/**/*.js.map
+!node_modules/**/*.js
+!node_modules/**/*.js.map
+!playwright.config.js

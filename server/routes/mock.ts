@@ -1,61 +1,115 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, Router } from 'express';
+import Ajv from 'ajv';
+import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import { faker } from '@faker-js/faker';
 import SmartDataGenerator from '../services/dataGenerator.js';
 import PersistentStorage from '../services/persistentStorage.js';
-import { OpenAPISpec, SpecData } from '../../types';
+import { BackendSpecData, Operation, GenerationContext } from '../../common/types';
 
-const router = express.Router();
+// Load environment variables from .env file
+dotenv.config();
 
-// Initialize advanced data generator
+const router = express.Router() as Router & { registerSpec?: (specId: string, specData: BackendSpecData) => Promise<void> };
+const ajv = new Ajv({ allErrors: true });
+
+// Validate mock mode
+const validModes = ['ai', 'advanced'] as const;
+
+// Initialize services
 const dataGenerator = new SmartDataGenerator();
 const storage = new PersistentStorage();
 
-// Load persistent data on startup
-let specs: Map<string, SpecData> = new Map();
+// Load configuration from environment variables
+const config = {
+  defaultDelay: parseInt(process.env.MOCK_DELAY || '0', 10),
+  defaultMockMode: validModes.includes(process.env.MOCK_MODE as any) ? process.env.MOCK_MODE as 'ai' | 'advanced' : 'advanced',
+  enableMockMetadata: process.env.ENABLE_MOCK_METADATA !== 'false',
+  seedData: process.env.SEED_DATA === 'true',
+};
+
+// Load persistent data and configuration on startup
+let specs: Map<string, BackendSpecData> = new Map();
 let mockData: Map<string, any> = new Map();
 
-// Initialize data loading
 async function initializeData() {
   try {
     specs = await storage.loadSpecs();
     mockData = await storage.loadMockData();
     console.log(`Mock route initialized with ${specs.size} specs`);
+    console.log('Mock configuration:', config);
+
+    if (config.seedData) {
+      await seedInitialData();
+    }
   } catch (error) {
     console.error('Error loading persistent data in mock route:', error);
   }
 }
 
+async function seedInitialData() {
+  try {
+    for (const [specId, specData] of specs.entries()) {
+      const paths = specData.spec_data?.paths || {};
+      for (const [path, methods] of Object.entries(paths)) {
+        for (const [method, operation] of Object.entries(methods)) {
+          if (method.toLowerCase() === 'get' && operation) {
+            const schema = operation.responses?.['200']?.content?.['application/json']?.schema;
+            if (schema) {
+              const scenarios = await dataGenerator.generateTestScenarios(schema, 3, config.defaultMockMode);
+              const collectionKey = path;
+              const collection = scenarios.map(scenario => scenario.data);
+              await storage.setMockData(collectionKey, collection);
+              console.log(`Seeded data for ${method} ${path}:`, collection);
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error seeding initial data:', error);
+  }
+}
+
 initializeData();
 
-// Get specs from the specs module
-function getSpecs(): Map<string, SpecData> {
+function getSpecs(): Map<string, BackendSpecData> {
   return specs;
 }
 
 interface MatchingRoute {
   path: string;
-  operation: any;
+  operation: Operation;
 }
 
-// Helper function to find matching route
-function findMatchingRoute(method: string, path: string, specData: SpecData): MatchingRoute | null {
+function resolveSchemaRef(ref: string, specData: any): any {
+  if (!ref || !specData) return null;
+  const path = ref.replace('#/', '').split('/');
+  let current = specData;
+  for (const segment of path) {
+    if (current && typeof current === 'object' && segment in current) {
+      current = current[segment];
+    } else {
+      return null;
+    }
+  }
+  return current;
+}
+
+function findMatchingRoute(method: string, path: string, specData: BackendSpecData): MatchingRoute | null {
   const paths = specData.spec_data?.paths || {};
   
-  // Try exact match first
-  if (paths[path] && (paths[path] as any)[method.toLowerCase()]) {
-    return { path, operation: (paths[path] as any)[method.toLowerCase()] };
+  if (paths[path] && paths[path][method.toLowerCase()]) {
+    return { path, operation: paths[path][method.toLowerCase()]! };
   }
   
-  // Try parameter matching (e.g., /pet/{petId} matches /pet/123)
   for (const [specPath, methods] of Object.entries(paths)) {
-    if ((methods as any)[method.toLowerCase()]) {
-      // Convert OpenAPI path parameters to regex
+    if (methods[method.toLowerCase()]) {
       const regexPath = specPath.replace(/\{[^}]+\}/g, '([^/]+)');
       const regex = new RegExp(`^${regexPath}$`);
       
       if (regex.test(path)) {
-        return { path: specPath, operation: (methods as any)[method.toLowerCase()] };
+        return { path: specPath, operation: methods[method.toLowerCase()]! };
       }
     }
   }
@@ -63,314 +117,14 @@ function findMatchingRoute(method: string, path: string, specData: SpecData): Ma
   return null;
 }
 
-// Generate mock response based on OpenAPI schema
-function generateMockResponse(operation: any, method: string, path: string, specData: SpecData | null = null): any {
-  const responses = operation.responses || {};
-  const successResponse = responses['200'] || responses['201'] || responses['default'];
-  
-  if (!successResponse) {
-    return { message: `Mock response for ${method} ${path}` };
-  }
-  
-  const schema = successResponse.content?.['application/json']?.schema;
-  
-  if (!schema) {
-    return { message: `Mock response for ${method} ${path}` };
-  }
-  
-  return generateFromSchemaWithContext(schema, method, path, specData);
-}
-
-// Generate data from OpenAPI schema with context
-function generateFromSchemaWithContext(schema: any, method: string, path: string, specData: SpecData | null = null, propertyName: string | null = null): any {
-  if (!schema) return {};
-  
-  if (schema.$ref) {
-    // Resolve $ref references
-    const refPath = schema.$ref.replace('#/', '').split('/');
-    let resolvedSchema = specData?.spec_data;
-    
-    for (const segment of refPath) {
-      if (resolvedSchema && (resolvedSchema as any)[segment]) {
-        resolvedSchema = (resolvedSchema as any)[segment];
-      } else {
-        // Fallback if reference can't be resolved
-        return { id: Math.floor(Math.random() * 1000), name: "Mock Item", status: "active" };
-      }
-    }
-    
-    return generateFromSchemaWithContext(resolvedSchema, method, path, specData, propertyName);
-  }
-  
-  if (schema.type === 'array') {
-    const itemSchema = schema.items || {};
-    const count = Math.min(3, Math.max(1, Math.floor(Math.random() * 3) + 1));
-    const items = [];
-    for (let i = 0; i < count; i++) {
-      if (itemSchema.type === 'string' && propertyName) {
-        items.push(generateContextualValue(propertyName));
-      } else {
-        items.push(generateFromSchemaWithContext(itemSchema, method, path, specData, propertyName));
-      }
-    }
-    return items;
-  }
-  
-  if (schema.type === 'object' || schema.properties) {
-    const result: any = {};
-    const properties = schema.properties || {};
-    
-    Object.entries(properties).forEach(([key, propSchema]) => {
-      result[key] = generateFromSchemaWithContext(propSchema, method, path, specData, key);
-    });
-    
-    // Add some default values if no properties
-    if (Object.keys(result).length === 0) {
-      result.id = Math.floor(Math.random() * 1000);
-      result.name = `Mock ${path.split('/').pop() || 'Item'}`;
-      result.status = "active";
-    }
-    
-    return result;
-  }
-  
-  // Handle primitive types
-  switch (schema.type) {
-    case 'string':
-      if (schema.enum) return schema.enum[0];
-      if (schema.format === 'email') return faker.internet.email();
-      if (schema.format === 'date-time') return new Date().toISOString();
-      if (propertyName) return generateContextualValue(propertyName);
-      return schema.example || faker.lorem.words({ min: 1, max: 2 });
-    case 'integer':
-    case 'number':
-      if (propertyName && propertyName.toLowerCase().includes('id')) {
-        return Math.floor(Math.random() * 100000) + 1; // Generate unique ID for any ID field
-      }
-      return schema.example || Math.floor(Math.random() * 100);
-    case 'boolean':
-      return schema.example !== undefined ? schema.example : faker.datatype.boolean();
-    default:
-      return schema.example || faker.lorem.word();
-  }
-}
-
-// Helper function for contextual value generation - works for any API
-function generateContextualValue(propertyName: string): any {
-  const lowerName = propertyName.toLowerCase();
-  
-  // ID patterns - handle any ID field
-  if (lowerName.includes('id') && (lowerName.endsWith('id') || lowerName.startsWith('id'))) {
-    return Math.floor(Math.random() * 100000) + 1;
-  }
-  
-  // URL patterns - generic for any API
-  if (lowerName.includes('url') || lowerName.includes('link') || lowerName.includes('uri')) {
-    // Photo/image URLs
-    if (lowerName.includes('photo') || lowerName.includes('image') || lowerName.includes('avatar') || lowerName.includes('picture')) {
-      return faker.image.url({ width: 400, height: 300 });
-    }
-    // Video URLs
-    if (lowerName.includes('video')) {
-      return faker.internet.url() + '/video/' + faker.system.fileName({ extensionCount: 1 }).replace(/\.[^/.]+$/, '.mp4');
-    }
-    // API URLs
-    if (lowerName.includes('api') || lowerName.includes('endpoint')) {
-      return faker.internet.url() + '/api/v1/' + faker.lorem.word();
-    }
-    // Website URLs
-    if (lowerName.includes('website') || lowerName.includes('homepage')) {
-      return faker.internet.url();
-    }
-    // Generic URLs
-    return faker.internet.url();
-  }
-  
-  // Email patterns
-  if (lowerName.includes('email')) {
-    return faker.internet.email();
-  }
-  
-  // Phone patterns
-  if (lowerName.includes('phone') || lowerName.includes('mobile') || lowerName.includes('tel')) {
-    return faker.phone.number();
-  }
-  
-  // Address patterns
-  if (lowerName.includes('address')) {
-    return faker.location.streetAddress();
-  }
-  if (lowerName.includes('city')) {
-    return faker.location.city();
-  }
-  if (lowerName.includes('country')) {
-    return faker.location.country();
-  }
-  if (lowerName.includes('zipcode') || lowerName.includes('postal')) {
-    return faker.location.zipCode();
-  }
-  
-  // Name patterns - generic for any entity
-  if (lowerName.includes('name')) {
-    if (lowerName.includes('first') || lowerName.includes('given')) {
-      return faker.person.firstName();
-    }
-    if (lowerName.includes('last') || lowerName.includes('family') || lowerName.includes('surname')) {
-      return faker.person.lastName();
-    }
-    if (lowerName.includes('full') || (lowerName.includes('user') || lowerName.includes('person') || lowerName.includes('author'))) {
-      return faker.person.fullName();
-    }
-    if (lowerName.includes('company') || lowerName.includes('organization') || lowerName.includes('business')) {
-      return faker.company.name();
-    }
-    if (lowerName.includes('product') || lowerName.includes('item')) {
-      return faker.commerce.productName();
-    }
-    if (lowerName.includes('tag')) {
-      return faker.lorem.word();
-    }
-    if (lowerName.includes('category')) {
-      return faker.commerce.department();
-    }
-    return faker.lorem.words(2);
-  }
-  
-  // ID patterns
-  if (lowerName.includes('id') || lowerName === 'uuid') {
-    if (lowerName.includes('uuid') || lowerName.includes('guid')) {
-      return faker.string.uuid();
-    }
-    return faker.number.int({ min: 1, max: 100000 });
-  }
-  
-  // Status patterns
-  if (lowerName.includes('status') || lowerName.includes('state')) {
-    return faker.helpers.arrayElement(['active', 'inactive', 'pending', 'completed', 'draft', 'published', 'archived']);
-  }
-  
-  // Description patterns
-  if (lowerName.includes('description') || lowerName.includes('summary') || lowerName.includes('content') || lowerName.includes('bio')) {
-    return faker.lorem.paragraph();
-  }
-  
-  // Title patterns
-  if (lowerName.includes('title') || lowerName.includes('heading')) {
-    return faker.lorem.sentence();
-  }
-  
-  // Price/Money patterns
-  if (lowerName.includes('price') || lowerName.includes('cost') || lowerName.includes('amount') || lowerName.includes('fee')) {
-    return faker.commerce.price();
-  }
-  
-  // Date patterns - smart date generation
-  if (lowerName.includes('date') || lowerName.includes('time')) {
-    if (lowerName.includes('birth') || lowerName.includes('born')) {
-      return faker.date.birthdate().toISOString();
-    }
-    if (lowerName.includes('created') || lowerName.includes('start')) {
-      return faker.date.past().toISOString();
-    }
-    if (lowerName.includes('updated') || lowerName.includes('modified') || lowerName.includes('last')) {
-      return faker.date.recent().toISOString();
-    }
-    if (lowerName.includes('future') || lowerName.includes('end') || lowerName.includes('expire')) {
-      return faker.date.future().toISOString();
-    }
-    return faker.date.recent().toISOString();
-  }
-  
-  // Color patterns
-  if (lowerName.includes('color') || lowerName.includes('colour')) {
-    return faker.color.human();
-  }
-  
-  // Username patterns
-  if (lowerName.includes('username') || lowerName.includes('handle')) {
-    return faker.internet.username();
-  }
-  
-  // Generate random string for any unmatched property
-  return faker.lorem.words({ min: 1, max: 3 });
-}
-
-// Generate data from OpenAPI schema
-function generateFromSchema(schema: any, method: string, path: string, specData: SpecData | null = null): any {
-  if (!schema) return {};
-  
-  if (schema.$ref) {
-    // Resolve $ref references
-    const refPath = schema.$ref.replace('#/', '').split('/');
-    let resolvedSchema = specData?.spec_data;
-    
-    for (const segment of refPath) {
-      if (resolvedSchema && (resolvedSchema as any)[segment]) {
-        resolvedSchema = (resolvedSchema as any)[segment];
-      } else {
-        // Fallback if reference can't be resolved
-        return { id: Math.floor(Math.random() * 1000), name: "Mock Item", status: "active" };
-      }
-    }
-    
-    return generateFromSchema(resolvedSchema, method, path, specData);
-  }
-  
-  if (schema.type === 'array') {
-    const itemSchema = schema.items || {};
-    const count = Math.min(3, Math.max(1, Math.floor(Math.random() * 3) + 1));
-    const items = [];
-    for (let i = 0; i < count; i++) {
-      items.push(generateFromSchema(itemSchema, method, path, specData));
-    }
-    return items;
-  }
-  
-  if (schema.type === 'object' || schema.properties) {
-    const result: any = {};
-    const properties = schema.properties || {};
-    
-    Object.entries(properties).forEach(([key, propSchema]) => {
-      result[key] = generateFromSchemaWithContext(propSchema, method, path, specData, key);
-    });
-    
-    // Add some default values if no properties
-    if (Object.keys(result).length === 0) {
-      result.id = Math.floor(Math.random() * 1000);
-      result.name = `Mock ${path.split('/').pop() || 'Item'}`;
-      result.status = "active";
-    }
-    
-    return result;
-  }
-  
-  // Handle primitive types
-  switch (schema.type) {
-    case 'string':
-      if (schema.enum) return schema.enum[0];
-      if (schema.format === 'email') return faker.internet.email();
-      if (schema.format === 'date-time') return new Date().toISOString();
-      return schema.example || faker.lorem.words({ min: 1, max: 2 });
-    case 'integer':
-    case 'number':
-      return schema.example || Math.floor(Math.random() * 100);
-    case 'boolean':
-      return schema.example !== undefined ? schema.example : faker.datatype.boolean();
-    default:
-      return schema.example || faker.lorem.word();
-  }
-}
-
-// Handle all mock API requests
 router.all('/*', async (req: Request, res: Response) => {
   try {
-    const { method } = req;
+    const { method, query, body } = req;
     const requestPath = req.path;
     
-    console.log(`Mock API request: ${method} ${requestPath}`);
+    console.log(`Mock API request: ${method} ${requestPath} ${JSON.stringify(query)}`);
     
-    // Find the spec that contains this endpoint
-    let matchingSpec: SpecData | null = null;
+    let matchingSpec: BackendSpecData | null = null;
     let matchingRoute: MatchingRoute | null = null;
     
     for (const [specId, specData] of specs.entries()) {
@@ -383,10 +137,8 @@ router.all('/*', async (req: Request, res: Response) => {
     }
     
     if (!matchingRoute) {
-      // Refresh specs in case they were updated after initialization
       await initializeData();
       
-      // Try again after refresh
       for (const [specId, specData] of specs.entries()) {
         const route = findMatchingRoute(method, requestPath, specData);
         if (route) {
@@ -400,122 +152,230 @@ router.all('/*', async (req: Request, res: Response) => {
         return res.status(404).json({
           error: 'Mock endpoint not found',
           message: `No mock available for ${method} ${requestPath}`,
-          availableSpecs: Array.from(specs.keys()),
-          availableSpecNames: Array.from(specs.values()).map(s => s.spec_name),
-          tip: 'Make sure you have imported an API specification that includes this endpoint'
         });
       }
     }
     
-    // Handle stateful operations - improved key generation logic
-    // For POST/PUT/PATCH: use base path (e.g., /pet)
-    // For GET: try both specific path and base path
-    const basePath = requestPath.replace(/\/[a-f0-9-]{36}$/i, '').replace(/\/\d+$/, ''); // Remove UUID or numeric ID
+    if (['POST', 'PUT', 'PATCH'].includes(method)) {
+      const requestBodySchema = matchingRoute.operation.requestBody?.content?.['application/json']?.schema;
+      if (requestBodySchema) {
+        try {
+          // Create AJV instance with schema resolution
+          const ajvWithRefs = new Ajv({ allErrors: true });
+          
+          // Add the full spec as a schema to resolve references
+          if (matchingSpec?.spec_data) {
+            ajvWithRefs.addSchema(matchingSpec.spec_data, '#');
+          }
+          
+          const validate = ajvWithRefs.compile(requestBodySchema);
+          const valid = validate(body);
+          if (!valid) {
+            console.log(`Invalid request body for ${method} ${requestPath}:`, validate.errors);
+            return res.status(400).json({
+              error: 'Invalid request body',
+              details: validate.errors,
+            });
+          }
+        } catch (validationError) {
+          console.log(`Validation setup failed for ${method} ${requestPath}, skipping validation:`, validationError);
+          // Continue without validation if schema resolution fails
+        }
+      }
+    }
+    
+    if (method === 'DELETE') {
+      const baseDataKey = requestPath.replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, '')
+        .replace(/\/\d+$/, '');
+      if (await storage.getMockData(requestPath)) {
+        await storage.deleteMockData(requestPath);
+        const collectionKey = baseDataKey;
+        let collection = await storage.getMockData(collectionKey) || [];
+        if (Array.isArray(collection)) {
+          collection = collection.filter((item: any) => item.id !== body.id);
+          await storage.setMockData(collectionKey, collection);
+        }
+        console.log(`Deleted resource at ${requestPath}`);
+        return res.status(204).send();
+      }
+      console.log(`No resource found for DELETE at ${requestPath}`);
+      return res.status(404).json({ error: 'Resource not found' });
+    }
+    
+    const mockMode = query.mockMode && validModes.includes(query.mockMode as any) && (query.mockMode !== 'ai' || dataGenerator.getAvailableModes().find(m => m.id === 'ai' && m.available))
+      ? query.mockMode as 'ai' | 'advanced'
+      : config.defaultMockMode;
+    
+    const basePath = requestPath.replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, '')
+      .replace(/\/\d+$/, '');
     const baseDataKey = basePath || requestPath;
     
-    if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
-      // Generate proper response based on the response schema, not just the request body
-      const mockResponse = generateMockResponse(matchingRoute.operation, method, requestPath, matchingSpec);
+    if (['POST', 'PUT', 'PATCH'].includes(method)) {
+      const schema = matchingRoute.operation.responses?.['200']?.content?.['application/json']?.schema ||
+                    matchingRoute.operation.responses?.['201']?.content?.['application/json']?.schema;
+      const context: GenerationContext = { generationMode: mockMode };
+      const mockResponse = schema
+        ? await dataGenerator.generateFromSchema(schema, context, matchingSpec?.spec_data)
+        : { message: `Mock response for ${method} ${requestPath}` };
       
-      // Generate unique ID for new resources
-      const uniqueId = req.body.id || mockResponse.id || Math.floor(Math.random() * 100000) + 1;
-      
-      // Merge request data with generated response to maintain stateful behavior
-      const storedData = {
-        ...mockResponse,
-        ...req.body,
-        id: uniqueId,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      
-      // For POST requests, use unique key to store multiple items
-      const storageKey = method === 'POST' ? `${baseDataKey}/${uniqueId}` : baseDataKey;
-      mockData.set(storageKey, storedData);
-      
-      // Also maintain a collection for GET requests
-      if (method === 'POST') {
-        const collectionKey = baseDataKey;
-        let collection = mockData.get(collectionKey) || [];
-        if (!Array.isArray(collection)) {
-          collection = [collection]; // Convert single item to array
+      // Generate ID based on schema type
+      let uniqueId = body.id;
+      if (!uniqueId && method === 'POST') {
+        // Check if schema defines ID type
+        let resolvedSchema = schema;
+        if (schema?.$ref && matchingSpec?.spec_data) {
+          resolvedSchema = resolveSchemaRef(schema.$ref, matchingSpec.spec_data);
         }
-        collection.push(storedData);
-        mockData.set(collectionKey, collection);
+        
+        const idSchema = resolvedSchema?.properties?.id;
+        
+        if (idSchema?.type === 'integer') {
+          // Generate realistic integer ID using Faker
+          uniqueId = faker.number.int({ min: 1, max: 999999 });
+        } else if (idSchema?.type === 'string' && idSchema?.format === 'uuid') {
+          uniqueId = faker.string.uuid();
+        } else {
+          // Default to integer for backwards compatibility
+          uniqueId = faker.number.int({ min: 1, max: 999999 });
+        }
+      }
+      if (!uniqueId) {
+        uniqueId = mockResponse.id || uuidv4();
       }
       
-      await storage.saveMockData(mockData);
-      console.log(`Stored data for key: ${baseDataKey}`, storedData);
+      const storedData = {
+        ...mockResponse,
+        ...body,
+        id: uniqueId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
       
-      // Return the full response with generated fields
+      const storageKey = method === 'POST' ? `${baseDataKey}/${uniqueId}` : baseDataKey;
+      await storage.setMockData(storageKey, storedData);
+      
+      if (method === 'POST') {
+        const collectionKey = baseDataKey;
+        let collection = await storage.getMockData(collectionKey) || [];
+        if (!Array.isArray(collection)) {
+          collection = [collection];
+        }
+        collection.push(storedData);
+        await storage.setMockData(collectionKey, collection);
+      }
+      
+      console.log(`Stored data for key: ${storageKey}`, storedData);
+      
       const response = {
         ...storedData,
-        _mock: {
-          endpoint: requestPath,
-          method: method,
-          spec: matchingSpec?.spec_name || 'unknown',
-          timestamp: new Date().toISOString(),
-          stateful: true
-        }
+        ...(query.mockDebug === 'true' || config.enableMockMetadata ? {
+          _mock: {
+            endpoint: requestPath,
+            method,
+            spec: matchingSpec?.spec_name || 'unknown',
+            timestamp: new Date().toISOString(),
+            stateful: true,
+            mode: mockMode,
+          },
+        } : {}),
       };
       
       const statusCode = method === 'POST' ? 201 : 200;
+      
+      const delay = matchingRoute.operation['x-mock-delay'] || config.defaultDelay;
+      if (delay > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
       return res.status(statusCode).json(response);
     }
     
-    // Generate response
     let responseData: any;
     
     if (method === 'GET') {
-      // Try to find stored data for GET requests
-      if (mockData.has(baseDataKey)) {
-        responseData = mockData.get(baseDataKey);
-        console.log(`Retrieved stored data for key: ${baseDataKey}`, responseData);
+      // First try to get the exact resource
+      if (await storage.getMockData(requestPath)) {
+        responseData = await storage.getMockData(requestPath);
+        console.log(`Retrieved stored data for key: ${requestPath}`, responseData);
       } else {
-        // If no exact match, try to find data for the base resource
-        const resourcePath = requestPath.split('/')[1]; // e.g., 'pet' from '/pet/123'
-        const resourceKey = `/${resourcePath}`;
-        if (mockData.has(resourceKey)) {
-          responseData = mockData.get(resourceKey);
-          console.log(`Retrieved stored data for resource key: ${resourceKey}`, responseData);
+        // Check if this is a collection endpoint (no ID in path)
+        const isCollectionEndpoint = !requestPath.match(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) && !requestPath.match(/\/\d+$/);
+        
+        if (isCollectionEndpoint) {
+          // For collection endpoints, return the collection
+          const resourcePath = requestPath.split('/')[1];
+          const resourceKey = `/${resourcePath}`;
+          if (await storage.getMockData(resourceKey)) {
+            responseData = await storage.getMockData(resourceKey);
+            console.log(`Retrieved collection data for resource key: ${resourceKey}`, responseData);
+            
+            if (Object.keys(query).length > 0 && Array.isArray(responseData)) {
+              responseData = responseData.filter((item: any) => {
+                return Object.entries(query).every(([key, value]) => {
+                  if (key === 'mockMode' || key === 'mockDebug') return true;
+                  if (typeof item[key] === 'string' && typeof value === 'string') {
+                    return item[key].toLowerCase().includes(value.toLowerCase());
+                  }
+                  return item[key] === value || String(item[key]) === value;
+                });
+              });
+              console.log(`Filtered data for ${requestPath} with query ${JSON.stringify(query)}`, responseData);
+            }
+          }
         }
+      }
+      
+      if (!responseData && (requestPath.match(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) || requestPath.match(/\/\d+$/))) {
+        console.log(`No resource found for ${requestPath.match(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) ? 'UUID' : 'numeric ID'} path: ${requestPath}`);
+        return res.status(404).json({ error: 'Resource not found' });
+      }
+      
+      // For collection endpoints, only return data if it exists in storage
+      if (!responseData && method === 'GET') {
+        console.log(`No stored data found for GET ${requestPath}, returning 404`);
+        return res.status(404).json({ error: 'No data available for this endpoint' });
       }
     }
     
     if (!responseData) {
-      // Generate mock response from schema using advanced data generator
       try {
         const schema = matchingRoute.operation.responses?.['200']?.content?.['application/json']?.schema ||
                       matchingRoute.operation.responses?.['201']?.content?.['application/json']?.schema;
-        
+        const context: GenerationContext = { generationMode: mockMode };
         if (schema) {
-          console.log(`Using contextual generation for ${method} ${requestPath}`);
-          responseData = generateFromSchemaWithContext(schema, method, requestPath, matchingSpec);
-          console.log(`Generated contextual mock response for ${method} ${requestPath}`, responseData);
+          console.log(`Using ${mockMode} generation for ${method} ${requestPath}`);
+          responseData = await dataGenerator.generateFromSchema(schema, context, matchingSpec?.spec_data);
+          console.log(`Generated mock response for ${method} ${requestPath}`, responseData);
         } else {
-          responseData = generateMockResponse(matchingRoute.operation, method, requestPath, matchingSpec);
+          responseData = { message: `Mock response for ${method} ${requestPath}` };
           console.log(`Generated basic mock response for ${method} ${requestPath}`, responseData);
         }
       } catch (error) {
-        console.error('Advanced generation failed, falling back to basic:', error);
-        responseData = generateMockResponse(matchingRoute.operation, method, requestPath, matchingSpec);
+        console.error('Generation failed, falling back to basic:', error);
+        responseData = { message: `Mock response for ${method} ${requestPath}` };
       }
     }
     
-    // Add metadata to response
     const response = {
       ...responseData,
-      _mock: {
-        endpoint: requestPath,
-        method: method,
-        spec: matchingSpec?.spec_name || 'unknown',
-        timestamp: new Date().toISOString(),
-        stateful: mockData.has(baseDataKey)
-      }
+      ...(query.mockDebug === 'true' || config.enableMockMetadata ? {
+        _mock: {
+          endpoint: requestPath,
+          method,
+          spec: matchingSpec?.spec_name || 'unknown',
+          timestamp: new Date().toISOString(),
+          stateful: await storage.getMockData(baseDataKey) !== undefined,
+          mode: mockMode,
+        },
+      } : {}),
     };
     
-    // Set appropriate status code
     const statusCode = method === 'POST' ? 201 : 200;
+    
+    const delay = matchingRoute.operation['x-mock-delay'] || config.defaultDelay;
+    if (delay > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
     
     res.status(statusCode).json(response);
     
@@ -525,13 +385,14 @@ router.all('/*', async (req: Request, res: Response) => {
       error: 'Mock API error',
       message: error instanceof Error ? error.message : 'Unknown error',
       path: req.path,
-      method: req.method
+      method: req.method,
     });
   }
 });
 
 // Export function to register specs
-(router as any).registerSpec = function(specId: string, specData: SpecData) {
+router.registerSpec = async function(specId: string, specData: BackendSpecData) {
+  await storage.setSpec(specId, specData);
   specs.set(specId, specData);
   console.log(`Registered spec for mocking: ${specData.spec_name} (${specId})`);
 };

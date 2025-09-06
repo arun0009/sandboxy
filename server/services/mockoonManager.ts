@@ -2,7 +2,7 @@ import { exec, spawn, ChildProcess } from 'child_process';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { OpenAPISpec, OpenAPISchema, Operation, MockoonEnvironment, MockoonRoute, MockoonResponse } from '../../types';
+import { OpenAPISpec, OpenAPISchema, Operation, MockoonEnvironment, MockoonRoute, MockoonResponse } from '../../common/types';
 
 interface MockoonInstance {
   process: ChildProcess;

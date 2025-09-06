@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { SpecData, MockoonEnvironment } from '../../types';
+import { SpecData, MockoonEnvironment, BackendSpecData } from '../../common/types';
 
 export class PersistentStorage {
   private dataDir: string;
@@ -9,10 +9,10 @@ export class PersistentStorage {
   private environmentsFile: string;
 
   constructor() {
-    this.dataDir = path.join(__dirname, '../data');
+    this.dataDir = process.env.MOCKOON_DATA_DIR || path.join(__dirname, '../data');
     this.specsFile = path.join(this.dataDir, 'specs.json');
     this.mockDataFile = path.join(this.dataDir, 'mockData.json');
-    this.environmentsFile = path.join(this.dataDir, 'environments.json');
+    this.environmentsFile = path.join(this.dataDir, 'mockoon-environments.json');
     
     this.ensureDataDirectory();
   }
@@ -27,21 +27,21 @@ export class PersistentStorage {
     }
   }
 
-  async loadSpecs(): Promise<Map<string, SpecData>> {
+  async loadSpecs(): Promise<Map<string, BackendSpecData>> {
     try {
       const data = await fs.readFile(this.specsFile, 'utf8');
       const parsed = JSON.parse(data);
       return new Map(Object.entries(parsed));
     } catch (error: any) {
       if (error.code === 'ENOENT') {
-        return new Map(); // File doesn't exist, return empty Map
+        return new Map();
       }
       console.error('Error loading specs:', error);
       return new Map();
     }
   }
 
-  async saveSpecs(specsMap: Map<string, SpecData>): Promise<void> {
+  async saveSpecs(specsMap: Map<string, BackendSpecData>): Promise<void> {
     try {
       const obj = Object.fromEntries(specsMap);
       await fs.writeFile(this.specsFile, JSON.stringify(obj, null, 2));
@@ -57,7 +57,7 @@ export class PersistentStorage {
       return new Map(Object.entries(parsed));
     } catch (error: any) {
       if (error.code === 'ENOENT') {
-        return new Map(); // File doesn't exist, return empty Map
+        return new Map();
       }
       console.error('Error loading mock data:', error);
       return new Map();
@@ -80,7 +80,7 @@ export class PersistentStorage {
       return new Map(Object.entries(parsed));
     } catch (error: any) {
       if (error.code === 'ENOENT') {
-        return new Map(); // File doesn't exist, return empty Map
+        return new Map();
       }
       console.error('Error loading environments:', error);
       return new Map();
@@ -96,13 +96,12 @@ export class PersistentStorage {
     }
   }
 
-  // Helper methods for individual operations
-  async getSpec(id: string): Promise<SpecData | undefined> {
+  async getSpec(id: string): Promise<BackendSpecData | undefined> {
     const specs = await this.loadSpecs();
     return specs.get(id);
   }
 
-  async setSpec(id: string, spec: SpecData): Promise<void> {
+  async setSpec(id: string, spec: BackendSpecData): Promise<void> {
     const specs = await this.loadSpecs();
     specs.set(id, spec);
     await this.saveSpecs(specs);
@@ -157,8 +156,7 @@ export class PersistentStorage {
     return deleted;
   }
 
-  // Batch operations for better performance
-  async getAllSpecs(): Promise<Map<string, SpecData>> {
+  async getAllSpecs(): Promise<Map<string, BackendSpecData>> {
     return await this.loadSpecs();
   }
 
@@ -170,13 +168,12 @@ export class PersistentStorage {
     return await this.loadEnvironments();
   }
 
-  // Clear all data (useful for testing)
   async clearAll(): Promise<void> {
     try {
       await Promise.all([
         fs.unlink(this.specsFile).catch(() => {}),
         fs.unlink(this.mockDataFile).catch(() => {}),
-        fs.unlink(this.environmentsFile).catch(() => {})
+        fs.unlink(this.environmentsFile).catch(() => {}),
       ]);
     } catch (error) {
       console.error('Error clearing data:', error);

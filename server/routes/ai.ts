@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import SmartDataGenerator from '../services/dataGenerator.js';
-import { OpenAPISchema, GenerationContext, GenerationMode } from '../../types';
+import { OpenAPISchema, GenerationContext, GenerationMode } from '../../common/types';
 
 const router = express.Router();
 const dataGenerator = new SmartDataGenerator();

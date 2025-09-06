@@ -84,8 +84,24 @@ app.use('/api/mockoon', mockoonRoutes);
 // Mock API routing - handle /api/mock/* requests
 app.use('/api/mock', mockRoutes);
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, '../public')));
+// Serve static files from public directory with proper MIME types
+// First serve from public/public (compiled frontend files)
+app.use(express.static(path.join(__dirname, '../public/public'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
+
+// Then serve from public root (for server types and other files)
+app.use(express.static(path.join(__dirname, '../public'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+  }
+}));
 
 // Serve frontend for all non-API routes
 app.get('*', (req: Request, res: Response): void => {
@@ -95,6 +111,15 @@ app.get('*', (req: Request, res: Response): void => {
       error: 'API route not found',
       path: req.originalUrl,
       method: req.method
+    });
+    return;
+  }
+  
+  // Skip static files (js, css, map files, etc.)
+  if (req.path.match(/\.(js|css|map|ico|png|jpg|jpeg|gif|svg)$/)) {
+    res.status(404).json({
+      error: 'Static file not found',
+      path: req.originalUrl
     });
     return;
   }
