@@ -1,9 +1,9 @@
-const { test, expect } = require('@playwright/test');
-const fs = require('fs');
-const path = require('path');
+import { test, expect } from '@playwright/test';
+import * as fs from 'fs';
+import * as path from 'path';
 
 test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
-  let baseURL;
+  let baseURL: string;
   
   test.beforeAll(async () => {
     baseURL = 'http://localhost:3001';
@@ -45,7 +45,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
     expect(specData.name).toBe('Test Petstore API');
     expect(specData.endpointCount).toBeGreaterThan(0);
     
-    console.log('✅ Spec imported successfully:', specData);
+    console.log('Spec imported successfully:', specData);
   });
 
   test('should handle POST request with smart data generation', async ({ page, request }) => {
@@ -75,7 +75,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
     expect(postResponse.ok()).toBeTruthy();
     const createdPet = await postResponse.json();
     
-    console.log('📝 POST Response:', createdPet);
+    console.log('POST Response:', createdPet);
     
     // Verify the response structure
     expect(createdPet.name).toBe('Fluffy');
@@ -117,14 +117,14 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
 
     expect(postResponse.ok()).toBeTruthy();
     const createdPet = await postResponse.json();
-    console.log('📝 Created Pet:', createdPet);
+    console.log('Created Pet:', createdPet);
 
     // Step 2: GET the same endpoint and verify data persistence
     const getResponse = await request.get('/api/mock/pets');
     expect(getResponse.ok()).toBeTruthy();
     
     const retrievedData = await getResponse.json();
-    console.log('📖 Retrieved Data:', retrievedData);
+    console.log('Retrieved Data:', retrievedData);
     
     // The mock system should return the previously POSTed data
     expect(retrievedData.name).toBe('Buddy');
@@ -151,7 +151,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
     expect(getResponse.ok()).toBeTruthy();
     
     const petData = await getResponse.json();
-    console.log('🔍 Pet by ID:', petData);
+    console.log('Pet by ID:', petData);
     
     // Should generate mock data based on schema
     expect(petData.id).toBeDefined();
@@ -179,7 +179,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
 
     expect(basicGenResponse.ok()).toBeTruthy();
     const generatedData = await basicGenResponse.json();
-    console.log('🧠 Generated Data:', generatedData);
+    console.log('Generated Data:', generatedData);
     
     expect(generatedData).toHaveLength(1);
     expect(generatedData[0].name).toBeDefined();
@@ -192,7 +192,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
     expect(response.status()).toBe(404);
     
     const errorData = await response.json();
-    console.log('❌ Error Response:', errorData);
+    console.log('Error Response:', errorData);
     
     expect(errorData.error).toBe('Mock endpoint not found');
     expect(errorData.message).toContain('No mock available for GET /nonexistent');
@@ -231,7 +231,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
     await page.waitForTimeout(2000); // Give time for the request
     
     const responseText = await page.locator('#testResponse').textContent();
-    console.log('🖥️ UI Test Response:', responseText);
+    console.log('UI Test Response:', responseText);
     
     expect(responseText).toContain('UI Test Pet');
     expect(responseText).toContain('Beagle');
@@ -259,7 +259,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
     
     // Check if the spec appears in the list
     const specsContent = await page.locator('#specsList').textContent();
-    console.log('📋 Specs List Content:', specsContent);
+    console.log('Specs List Content:', specsContent);
     
     expect(specsContent).toContain('UI Test Petstore');
   });
@@ -280,7 +280,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
     
     expect(importResponse.ok()).toBeTruthy();
     const specData = await importResponse.json();
-    console.log('✅ Step 1 - Spec imported:', specData.name);
+    console.log('Step 1 - Spec imported:', specData.name);
 
     // Step 2: POST data with smart generation
     const testPet = {
@@ -296,14 +296,14 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
 
     expect(postResponse.ok()).toBeTruthy();
     const createdPet = await postResponse.json();
-    console.log('✅ Step 2 - Pet created:', createdPet.name, 'ID:', createdPet.id);
+    console.log('Step 2 - Pet created:', createdPet.name, 'ID:', createdPet.id);
 
     // Step 3: GET the data back and verify persistence
     const getResponse = await request.get('/api/mock/pets');
     expect(getResponse.ok()).toBeTruthy();
     
     const retrievedPet = await getResponse.json();
-    console.log('✅ Step 3 - Pet retrieved:', retrievedPet.name);
+    console.log('Step 3 - Pet retrieved:', retrievedPet.name);
 
     // Step 4: Verify data integrity
     expect(retrievedPet.name).toBe(testPet.name);
@@ -312,15 +312,15 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
     expect(retrievedPet.status).toBe(testPet.status);
     expect(retrievedPet._mock.stateful).toBe(true);
     
-    console.log('✅ Step 4 - Data integrity verified');
+    console.log('Step 4 - Data integrity verified');
 
     // Step 5: Test parameterized GET
     const paramGetResponse = await request.get(`/api/mock/pets/${createdPet.id}`);
     expect(paramGetResponse.ok()).toBeTruthy();
     
     const paramPet = await paramGetResponse.json();
-    console.log('✅ Step 5 - Parameterized GET works:', paramPet._mock.endpoint);
+    console.log('Step 5 - Parameterized GET works:', paramPet._mock.endpoint);
 
-    console.log('🎉 Comprehensive workflow test completed successfully!');
+    console.log('Comprehensive workflow test completed successfully!');
   });
 });

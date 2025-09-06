@@ -1,12 +1,12 @@
-const express = require('express');
-const { v4: uuidv4 } = require('uuid');
-const MockoonService = require('../services/mockoonService');
+import express, { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import MockoonService from '../services/mockoonService.js';
 
 const router = express.Router();
 const mockoonService = new MockoonService();
 
 // Check Mockoon availability
-router.get('/status', async (req, res) => {
+router.get('/status', async (req: Request, res: Response) => {
   try {
     const isAvailable = await mockoonService.checkMockoonAvailability();
     const runningInstances = mockoonService.getRunningInstances();
@@ -23,7 +23,7 @@ router.get('/status', async (req, res) => {
 });
 
 // Create and start Mockoon environment from OpenAPI spec
-router.post('/environments', async (req, res) => {
+router.post('/environments', async (req: Request, res: Response) => {
   try {
     res.json({
       message: 'Mockoon environment creation is now handled by the specs service',
@@ -38,7 +38,7 @@ router.post('/environments', async (req, res) => {
 });
 
 // Stop Mockoon environment
-router.delete('/environments/:environmentId', async (req, res) => {
+router.delete('/environments/:environmentId', async (req: Request, res: Response) => {
   try {
     const { environmentId } = req.params;
     
@@ -57,13 +57,13 @@ router.delete('/environments/:environmentId', async (req, res) => {
     console.error('Error stopping Mockoon environment:', error);
     res.status(500).json({ 
       error: 'Failed to stop Mockoon environment',
-      details: error.message 
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
 // List all Mockoon environments
-router.get('/environments', async (req, res) => {
+router.get('/environments', async (req: Request, res: Response) => {
   try {
     const runningInstances = mockoonService.getRunningInstances();
     
@@ -81,12 +81,12 @@ router.get('/environments', async (req, res) => {
 });
 
 // Get specific Mockoon environment
-router.get('/environments/:environmentId', async (req, res) => {
+router.get('/environments/:environmentId', async (req: Request, res: Response) => {
   try {
     const { environmentId } = req.params;
     
     // Check if process is still running
-    const isRunning = mockoonService.mockoonInstances.has(environmentId);
+    const isRunning = (mockoonService as any).mockoonInstances.has(environmentId);
     
     res.json({
       environmentId,
@@ -102,7 +102,7 @@ router.get('/environments/:environmentId', async (req, res) => {
 });
 
 // Restart Mockoon environment
-router.post('/environments/:environmentId/restart', async (req, res) => {
+router.post('/environments/:environmentId/restart', async (req: Request, res: Response) => {
   try {
     const { environmentId } = req.params;
     
@@ -117,9 +117,9 @@ router.post('/environments/:environmentId/restart', async (req, res) => {
     console.error('Error restarting Mockoon environment:', error);
     res.status(500).json({ 
       error: 'Failed to restart Mockoon environment',
-      details: error.message 
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
-module.exports = router;
+export default router;

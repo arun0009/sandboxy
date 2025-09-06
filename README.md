@@ -8,7 +8,7 @@ A smart, stateful API sandbox that turns your OpenAPI specs into realistic mock 
 - **Multi-API Integration**: Import and connect multiple OpenAPI specifications
 - **Smart Data**: Intelligent fake data generation with realistic context
 - **Stateful Mocking**: Persistent data storage - POST data is retrievable via GET
-- **Modern UI**: Clean, professional interface for API testing
+- **Modern UI**: Interface for API testing
 - **Live Testing**: Real-time API endpoint testing
 - **Mock Management**: Easy mock server status and log monitoring
 - **Quick Testing**: Built-in API tester for immediate validation
@@ -37,7 +37,7 @@ A smart, stateful API sandbox that turns your OpenAPI specs into realistic mock 
 ## Architecture
 
 - **Backend**: Node.js + Express with Mockoon CLI for stateful mocking
-- **Frontend**: Modern UI (Vanilla JS, lightweight, responsive)
+- **Frontend**: Modern UI (lightweight, responsive)
 - **Mock Engine**: Mockoon-powered stateful mocking with OpenAPI spec support
 - **Data Generation**: Smart realistic data generation for testing
 

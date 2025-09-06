@@ -1,19 +1,18 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
-const compression = require('compression');
-const rateLimit = require('express-rate-limit');
-const WebSocket = require('ws');
-const http = require('http');
-const path = require('path');
-require('dotenv').config();
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import WebSocket from 'ws';
+import http from 'http';
+import path from 'path';
 
-const specRoutes = require('./routes/specs');
-const dataRoutes = require('./routes/data');
-const aiRoutes = require('./routes/ai');
-const mockoonRoutes = require('./routes/mockoon');
-const { broadcastUpdate } = require('./services/websocket');
+import specsRoutes from './routes/specs.js';
+import dataRoutes from './routes/data.js';
+import aiRoutes from './routes/ai.js';
+import mockoonRoutes from './routes/mockoon.js';
+import mockRoutes from './routes/mock.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -22,9 +21,13 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, path: '/ws' });
 
 // Store WebSocket connections
+declare global {
+  var wsConnections: Set<WebSocket>;
+}
+
 global.wsConnections = new Set();
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws: WebSocket) => {
   global.wsConnections.add(ws);
   console.log('WebSocket client connected');
   
@@ -33,7 +36,7 @@ wss.on('connection', (ws) => {
     console.log('WebSocket client disconnected');
   });
   
-  ws.on('error', (error) => {
+  ws.on('error', (error: Error) => {
     console.error('WebSocket error:', error);
     global.wsConnections.delete(ws);
   });
@@ -46,14 +49,14 @@ app.use(morgan('combined'));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use(limiter);
 
 // CORS configuration
-const corsOptions = {
+const corsOptions: cors.CorsOptions = {
   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
   credentials: true,
   optionsSuccessStatus: 200
@@ -64,7 +67,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (req: Request, res: Response) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
@@ -73,26 +76,27 @@ app.get('/health', (req, res) => {
 });
 
 // API Routes
-app.use('/api/specs', specRoutes);
+app.use('/api/specs', specsRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/mockoon', mockoonRoutes);
 
 // Mock API routing - handle /api/mock/* requests
-app.use('/api/mock', require('./routes/mock'));
+app.use('/api/mock', mockRoutes);
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Serve frontend for all non-API routes
-app.get('*', (req, res) => {
+app.get('*', (req: Request, res: Response): void => {
   // Skip API routes
   if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ 
+    res.status(404).json({ 
       error: 'API route not found',
       path: req.originalUrl,
       method: req.method
     });
+    return;
   }
   
   // Serve simple HTML frontend
@@ -100,7 +104,7 @@ app.get('*', (req, res) => {
 });
 
 // Global error handler
-app.use((error, req, res, next) => {
+app.use((error: Error & { status?: number }, req: Request, res: Response, next: NextFunction) => {
   console.error('Global error handler:', error);
   res.status(error.status || 500).json({
     error: error.message || 'Internal server error',
@@ -111,7 +115,7 @@ app.use((error, req, res, next) => {
 // Start server without database initialization
 const PORT = process.env.PORT || 3001;
 
-function startServer() {
+function startServer(): void {
   try {
     server.listen(PORT, () => {
       console.log(`Smart API Sandbox server running on port ${PORT}`);

@@ -1,16 +1,38 @@
-const { exec, spawn } = require('child_process');
-const fs = require('fs').promises;
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+import { exec, spawn, ChildProcess } from 'child_process';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { OpenAPISpec, OpenAPISchema, Operation, MockoonEnvironment, MockoonRoute, MockoonResponse } from '../../types';
 
-class MockoonManager {
+interface MockoonInstance {
+  process: ChildProcess;
+  port: number;
+  environmentId: string;
+}
+
+interface EnvironmentResult {
+  environmentId: string;
+  environmentFile: string;
+  port: number;
+}
+
+interface MockoonAvailability {
+  available: boolean;
+  version?: string;
+  error?: string;
+}
+
+export class MockoonManager {
+  private mockoonInstances: Map<string, MockoonInstance>;
+  private mockoonDataDir: string;
+
   constructor() {
     this.mockoonInstances = new Map();
     this.mockoonDataDir = path.join(__dirname, '../mockoon-data');
     this.ensureDataDirectory();
   }
 
-  async ensureDataDirectory() {
+  private async ensureDataDirectory(): Promise<void> {
     try {
       await fs.mkdir(this.mockoonDataDir, { recursive: true });
     } catch (error) {
@@ -19,7 +41,7 @@ class MockoonManager {
   }
 
   // Create Mockoon environment from OpenAPI spec
-  async createEnvironmentFromSpec(specId, openApiSpec, specName = 'API') {
+  async createEnvironmentFromSpec(specId: string, openApiSpec: OpenAPISpec, specName: string = 'API'): Promise<EnvironmentResult> {
     try {
       const environmentId = uuidv4();
       const environmentFile = path.join(this.mockoonDataDir, `${environmentId}.json`);
@@ -42,10 +64,10 @@ class MockoonManager {
   }
 
   // Convert OpenAPI spec to Mockoon environment format
-  convertOpenApiToMockoon(specId, openApiSpec, specName) {
+  private convertOpenApiToMockoon(specId: string, openApiSpec: OpenAPISpec, specName: string): MockoonEnvironment {
     const port = 3100 + Math.floor(Math.random() * 900); // Random port 3100-3999
     
-    const environment = {
+    const environment: MockoonEnvironment = {
       uuid: uuidv4(),
       lastMigration: 29,
       name: specName,
@@ -53,9 +75,7 @@ class MockoonManager {
       latency: 0,
       port: port,
       hostname: "0.0.0.0",
-      folders: [],
       routes: [],
-      rootChildren: [],
       proxyMode: false,
       proxyHost: "",
       proxyRemovePrefix: false,
@@ -69,8 +89,7 @@ class MockoonManager {
       ],
       proxyReqHeaders: [],
       proxyResHeaders: [],
-      data: [],
-      callbacks: []
+      data: []
     };
 
     // Create data buckets for stateful storage
@@ -97,12 +116,8 @@ class MockoonManager {
     Object.entries(paths).forEach(([path, methods]) => {
       Object.entries(methods).forEach(([method, operation]) => {
         if (['get', 'post', 'put', 'patch', 'delete'].includes(method.toLowerCase())) {
-          const route = this.createMockoonRoute(path, method, operation, openApiSpec);
+          const route = this.createMockoonRoute(path, method, operation as Operation, openApiSpec);
           environment.routes.push(route);
-          environment.rootChildren.push({
-            type: "route",
-            uuid: route.uuid
-          });
         }
       });
     });
@@ -111,7 +126,7 @@ class MockoonManager {
   }
 
   // Create individual Mockoon route from OpenAPI operation
-  createMockoonRoute(path, method, operation, spec) {
+  private createMockoonRoute(path: string, method: string, operation: Operation, spec: OpenAPISpec): MockoonRoute {
     const routeId = uuidv4();
     
     // Get response schema for smart data generation
@@ -120,40 +135,39 @@ class MockoonManager {
     const responseSchema = successResponse?.content?.['application/json']?.schema;
     
     // Generate smart response body using data buckets
-    let responseBody = this.generateSmartResponseBody(method.toUpperCase(), path, responseSchema);
+    const responseBody = this.generateSmartResponseBody(method.toUpperCase(), path, responseSchema);
     
+    const mockoonResponse: MockoonResponse = {
+      uuid: uuidv4(),
+      body: responseBody,
+      latency: 0,
+      statusCode: method.toLowerCase() === 'post' ? 201 : 200,
+      label: "Success",
+      headers: [],
+      bodyType: "INLINE",
+      filePath: "",
+      databucketID: "",
+      sendFileAsBody: false,
+      rules: [],
+      rulesOperator: "OR",
+      disableTemplating: false,
+      fallbackTo404: false,
+      default: true
+    };
+
     return {
       uuid: routeId,
-      type: "http",
       documentation: operation.summary || operation.description || `${method.toUpperCase()} ${path}`,
       method: method.toUpperCase(),
       endpoint: path,
-      responses: [
-        {
-          uuid: uuidv4(),
-          body: responseBody,
-          latency: 0,
-          statusCode: method.toLowerCase() === 'post' ? 201 : 200,
-          label: "Success",
-          headers: [],
-          bodyType: "INLINE",
-          filePath: "",
-          databucketID: "",
-          sendFileAsBody: false,
-          rules: [],
-          rulesOperator: "OR",
-          disableTemplating: false,
-          fallbackTo404: false,
-          default: true,
-          crudKey: "id"
-        }
-      ],
-      responseMode: null
+      responses: [mockoonResponse],
+      enabled: true,
+      responseMode: "SEQUENTIAL"
     };
   }
 
   // Generate smart response body using Mockoon templating and data buckets
-  generateSmartResponseBody(method, path, schema) {
+  private generateSmartResponseBody(method: string, path: string, schema?: OpenAPISchema): string {
     switch (method) {
       case 'GET':
         if (path.includes('{') || path.includes(':')) {
@@ -183,25 +197,25 @@ class MockoonManager {
   }
 
   // Generate response based on OpenAPI schema
-  generateSchemaBasedResponse(schema) {
+  private generateSchemaBasedResponse(schema?: OpenAPISchema): string {
     if (!schema) {
       return '{"message": "Success", "timestamp": "{{now}}"}';
     }
 
     if (schema.type === 'array') {
-      return `[${this.generateObjectFromSchema(schema.items || {})}]`;
+      return `[${this.generateObjectFromSchema(schema.items)}]`;
     }
     
     return this.generateObjectFromSchema(schema);
   }
 
-  generateObjectFromSchema(schema) {
-    if (!schema.properties) {
+  private generateObjectFromSchema(schema?: OpenAPISchema): string {
+    if (!schema?.properties) {
       return '{"id": "{{faker \'datatype.uuid\'}}", "createdAt": "{{now}}"}';
     }
 
     const properties = Object.entries(schema.properties).map(([key, prop]) => {
-      let value;
+      let value: string;
       
       switch (prop.type) {
         case 'string':
@@ -233,7 +247,7 @@ class MockoonManager {
   }
 
   // Start Mockoon environment
-  async startEnvironment(environmentFile) {
+  async startEnvironment(environmentFile: string): Promise<ChildProcess> {
     try {
       const process = spawn('mockoon-cli', ['start', '--data', environmentFile], {
         stdio: 'pipe'
@@ -242,14 +256,14 @@ class MockoonManager {
       return new Promise((resolve, reject) => {
         let output = '';
         
-        process.stdout.on('data', (data) => {
+        process.stdout?.on('data', (data) => {
           output += data.toString();
           if (output.includes('Server started')) {
             resolve(process);
           }
         });
 
-        process.stderr.on('data', (data) => {
+        process.stderr?.on('data', (data) => {
           console.error('Mockoon error:', data.toString());
         });
 
@@ -270,10 +284,10 @@ class MockoonManager {
   }
 
   // Stop Mockoon environment
-  async stopEnvironment(environmentId) {
+  async stopEnvironment(environmentId: string): Promise<boolean> {
     const instance = this.mockoonInstances.get(environmentId);
     if (instance) {
-      instance.kill();
+      instance.process.kill();
       this.mockoonInstances.delete(environmentId);
       return true;
     }
@@ -281,7 +295,7 @@ class MockoonManager {
   }
 
   // Check if Mockoon CLI is available
-  async checkMockoonAvailability() {
+  async checkMockoonAvailability(): Promise<MockoonAvailability> {
     return new Promise((resolve) => {
       exec('mockoon-cli --version', (error, stdout) => {
         if (error) {
@@ -294,4 +308,4 @@ class MockoonManager {
   }
 }
 
-module.exports = MockoonManager;
+export default MockoonManager;

@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ES2020",
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "outDir": "./dist/public",
+    "rootDir": "./public",
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": [
+    "public/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "server",
+    "types",
+    "tests"
+  ]
+}

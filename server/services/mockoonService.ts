@@ -1,16 +1,20 @@
-const { exec, spawn } = require('child_process');
-const fs = require('fs').promises;
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+import { exec, spawn, ChildProcess } from 'child_process';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { OpenAPISpec, MockoonEnvironment } from '../../types';
 
-class MockoonService {
+export class MockoonService {
+  public mockoonInstances: Map<string, ChildProcess>;
+  private mockoonDataDir: string;
+
   constructor() {
     this.mockoonInstances = new Map();
     this.mockoonDataDir = path.join(__dirname, '../mockoon-data');
     this.ensureDataDirectory();
   }
 
-  async ensureDataDirectory() {
+  async ensureDataDirectory(): Promise<void> {
     try {
       await fs.mkdir(this.mockoonDataDir, { recursive: true });
     } catch (error) {
@@ -19,7 +23,11 @@ class MockoonService {
   }
 
   // Create a Mockoon environment from OpenAPI spec
-  async createEnvironmentFromSpec(specId, openApiSpec) {
+  async createEnvironmentFromSpec(specId: string, openApiSpec: OpenAPISpec): Promise<{
+    environmentId: string;
+    environmentFile: string;
+    port: number;
+  }> {
     try {
       const environmentId = uuidv4();
       const environmentFile = path.join(this.mockoonDataDir, `${environmentId}.json`);
@@ -42,11 +50,11 @@ class MockoonService {
   }
 
   // Convert OpenAPI spec to Mockoon environment format
-  convertOpenApiToMockoon(specId, openApiSpec) {
+  convertOpenApiToMockoon(specId: string, openApiSpec: OpenAPISpec): any {
     const basePort = 3001; // Start from 3001 to avoid conflicts
     const port = basePort + Math.floor(Math.random() * 1000);
     
-    const environment = {
+    const environment: any = {
       uuid: uuidv4(),
       lastMigration: 32,
       name: `API Sandbox - ${openApiSpec.info?.title || specId}`,
@@ -94,7 +102,7 @@ class MockoonService {
   }
 
   // Create a Mockoon route from OpenAPI operation
-  createMockoonRoute(path, method, operation) {
+  createMockoonRoute(path: string, method: string, operation: any): any {
     const routeId = uuidv4();
     
     // Convert OpenAPI path parameters to Mockoon format
@@ -155,14 +163,14 @@ class MockoonService {
   }
 
   // Generate mock response from OpenAPI schema
-  generateMockResponse(schema) {
+  generateMockResponse(schema: any): string {
     try {
       if (schema.example) {
         return JSON.stringify(schema.example, null, 2);
       }
       
       if (schema.type === 'object' && schema.properties) {
-        const mockObject = {};
+        const mockObject: any = {};
         Object.entries(schema.properties).forEach(([key, prop]) => {
           mockObject[key] = this.generateMockValue(prop);
         });
@@ -182,7 +190,7 @@ class MockoonService {
   }
 
   // Generate mock value based on schema type
-  generateMockValue(schema) {
+  generateMockValue(schema: any): any {
     if (schema.example !== undefined) {
       return schema.example;
     }
@@ -202,7 +210,7 @@ class MockoonService {
         return schema.items ? [this.generateMockValue(schema.items)] : [];
       case 'object':
         if (schema.properties) {
-          const obj = {};
+          const obj: any = {};
           Object.entries(schema.properties).forEach(([key, prop]) => {
             obj[key] = this.generateMockValue(prop);
           });
@@ -215,7 +223,7 @@ class MockoonService {
   }
 
   // Start a Mockoon instance
-  async startMockoonInstance(environmentFile, port) {
+  async startMockoonInstance(environmentFile: string, port: number): Promise<ChildProcess> {
     return new Promise((resolve, reject) => {
       const mockoonProcess = spawn('npx', ['@mockoon/cli', 'start', '--data', environmentFile, '--port', port.toString()], {
         stdio: ['ignore', 'pipe', 'pipe']
@@ -223,7 +231,7 @@ class MockoonService {
 
       let started = false;
       
-      mockoonProcess.stdout.on('data', (data) => {
+      mockoonProcess.stdout?.on('data', (data) => {
         const output = data.toString();
         console.log(`Mockoon stdout: ${output}`);
         
@@ -235,7 +243,7 @@ class MockoonService {
         }
       });
 
-      mockoonProcess.stderr.on('data', (data) => {
+      mockoonProcess.stderr?.on('data', (data) => {
         console.error(`Mockoon stderr: ${data}`);
       });
 
@@ -261,7 +269,7 @@ class MockoonService {
   }
 
   // Stop a Mockoon instance
-  async stopMockoonInstance(environmentId) {
+  async stopMockoonInstance(environmentId: string): Promise<boolean> {
     const instance = this.mockoonInstances.get(environmentId);
     if (instance) {
       instance.kill();
@@ -272,12 +280,12 @@ class MockoonService {
   }
 
   // Get running instances
-  getRunningInstances() {
+  getRunningInstances(): string[] {
     return Array.from(this.mockoonInstances.keys());
   }
 
   // Check if Mockoon CLI is available
-  async checkMockoonAvailability() {
+  async checkMockoonAvailability(): Promise<boolean> {
     return new Promise((resolve) => {
       exec('npx @mockoon/cli --version', (error, stdout, stderr) => {
         if (error) {
@@ -292,4 +300,4 @@ class MockoonService {
   }
 }
 
-module.exports = MockoonService;
+export default MockoonService;

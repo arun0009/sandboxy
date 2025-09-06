@@ -1,9 +1,10 @@
-const express = require('express');
+import express, { Request, Response } from 'express';
+import { GenerationMode } from '../../types';
 
 const router = express.Router();
 
 // Get all stored mock data - now handled by Mockoon data buckets
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     res.json({
       message: 'Mock data is now stored in Mockoon data buckets',
@@ -17,7 +18,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get API call logs - simplified response
-router.get('/logs', async (req, res) => {
+router.get('/logs', async (req: Request, res: Response) => {
   try {
     res.json({
       message: 'API logging is now handled by Mockoon',
@@ -31,7 +32,7 @@ router.get('/logs', async (req, res) => {
 });
 
 // Get analytics data - simplified response
-router.get('/analytics', async (req, res) => {
+router.get('/analytics', async (req: Request, res: Response) => {
   try {
     const { timeframe = '24h' } = req.query;
     
@@ -48,7 +49,7 @@ router.get('/analytics', async (req, res) => {
 });
 
 // Get stored data for a specific resource - simplified response
-router.get('/resource/:resourceId', async (req, res) => {
+router.get('/resource/:resourceId', async (req: Request, res: Response) => {
   try {
     const { resourceId } = req.params;
     
@@ -65,29 +66,25 @@ router.get('/resource/:resourceId', async (req, res) => {
 });
 
 // Get available data generation modes
-router.get('/generation-modes', async (req, res) => {
+router.get('/generation-modes', async (req: Request, res: Response) => {
   try {
+    const modes: GenerationMode[] = [
+      {
+        id: 'advanced',
+        name: 'Advanced Generation',
+        description: 'Enhanced mock data with Faker.js and smart patterns',
+        available: true
+      },
+      {
+        id: 'ai',
+        name: 'AI-Enhanced Generation',
+        description: 'AI-powered contextual data generation',
+        available: !!process.env.OPENAI_API_KEY
+      }
+    ];
+
     res.json({
-      modes: [
-        {
-          id: 'simple',
-          name: 'Simple Generation',
-          description: 'Basic mock data generation with contextual values',
-          enabled: true
-        },
-        {
-          id: 'advanced',
-          name: 'Advanced Generation',
-          description: 'Enhanced mock data with Faker.js and smart patterns',
-          enabled: true
-        },
-        {
-          id: 'ai',
-          name: 'AI-Enhanced Generation',
-          description: 'AI-powered contextual data generation',
-          enabled: !!process.env.OPENAI_API_KEY
-        }
-      ],
+      modes,
       default: 'advanced',
       info: 'Data generation modes control how mock responses are created from OpenAPI schemas'
     });
@@ -97,4 +94,4 @@ router.get('/generation-modes', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

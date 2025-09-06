@@ -1,18 +1,41 @@
 // Simplified data generator - Mockoon handles most data generation
 // This class now focuses only on AI-enhanced data generation
 
-const { faker } = require('@faker-js/faker');
+import { faker } from '@faker-js/faker';
 
-class AIDataEnhancer {
+interface Factory {
+  build: () => any;
+}
+
+interface FormatInfo {
+  format: string | null;
+  example: any;
+}
+
+interface TestScenario {
+  id: number;
+  name: string;
+  description: string;
+  data: any;
+  type: string;
+}
+
+export class AIDataEnhancer {
+  public isAIAvailable: boolean;
+  private userFactory!: Factory;
+  private productFactory!: Factory;
+  private apiResponseFactory!: Factory;
+
   constructor() {
     this.isAIAvailable = this.checkAIAvailability();
+    this.setupFactories();
   }
   
-  checkAIAvailability() {
-    return process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== '';
+  checkAIAvailability(): boolean {
+    return !!(process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY.trim() !== '');
   }
 
-  setupFactories() {
+  setupFactories(): void {
     // User factory with realistic data
     this.userFactory = {
       build: () => ({
@@ -34,7 +57,7 @@ class AIDataEnhancer {
         id: faker.string.uuid(),
         name: faker.commerce.productName(),
         slug: faker.lorem.slug(),
-        price: faker.number.float({ min: 10, max: 1000, precision: 0.01 }),
+        price: faker.number.float({ min: 10, max: 1000, fractionDigits: 2 }),
         category: faker.commerce.department(),
         description: faker.lorem.paragraph(),
         inStock: faker.datatype.boolean(),
@@ -55,7 +78,7 @@ class AIDataEnhancer {
   }
 
   // Main generation method using modern libraries
-  async generateFromSchema(schema, context = {}) {
+  async generateFromSchema(schema: any, context: any = {}): Promise<any> {
     try {
       // First try factory-based generation for common patterns
       const factoryResult = this.tryFactoryGeneration(schema, context);
@@ -66,8 +89,8 @@ class AIDataEnhancer {
       // Enhance schema with format hints and examples for better generation
       const enhancedSchema = this.enhanceSchemaWithFormats(schema, context);
       
-      // Generate using json-schema-faker with modern faker
-      const generated = jsf.generate(enhancedSchema);
+      // Generate using enhanced schema with faker
+      const generated = this.generateFromEnhancedSchema(enhancedSchema);
       
       return this.postProcessData(generated, context);
     } catch (error) {
@@ -75,8 +98,31 @@ class AIDataEnhancer {
       return this.fallbackGeneration(schema);
     }
   }
+
+  private generateFromEnhancedSchema(schema: any): any {
+    if (!schema) return {};
+    
+    if (schema.type === 'object' && schema.properties) {
+      const result: any = {};
+      Object.entries(schema.properties).forEach(([key, prop]: [string, any]) => {
+        result[key] = this.generateFromEnhancedSchema(prop);
+      });
+      return result;
+    }
+    
+    if (schema.type === 'array' && schema.items) {
+      const count = faker.number.int({ min: 1, max: 3 });
+      return Array.from({ length: count }, () => this.generateFromEnhancedSchema(schema.items));
+    }
+    
+    if (schema.example !== undefined) {
+      return schema.example;
+    }
+    
+    return this.generateSimpleValue(schema);
+  }
   
-  tryFactoryGeneration(schema, context) {
+  tryFactoryGeneration(schema: any, context: any): any | null {
     // Check if this looks like a common pattern we have factories for
     if (schema.properties) {
       const props = Object.keys(schema.properties);
@@ -102,7 +148,7 @@ class AIDataEnhancer {
     return null;
   }
 
-  enhanceSchemaWithFormats(schema, context) {
+  enhanceSchemaWithFormats(schema: any, context: any): any {
     if (!schema || typeof schema !== 'object') return schema;
 
     const enhanced = JSON.parse(JSON.stringify(schema));
@@ -140,7 +186,7 @@ class AIDataEnhancer {
     return enhanced;
   }
 
-  detectFormatAndExample(propertyName) {
+  detectFormatAndExample(propertyName: string): FormatInfo {
     const name = propertyName.toLowerCase();
     
     // Email patterns
@@ -196,7 +242,7 @@ class AIDataEnhancer {
     return { format: null, example: null };
   }
 
-  generateExampleForProperty(propertyName, propertySchema) {
+  generateExampleForProperty(propertyName: string, propertySchema: any): any {
     const name = propertyName.toLowerCase();
     const type = propertySchema.type;
     
@@ -232,10 +278,10 @@ class AIDataEnhancer {
     
     if (type === 'number' || type === 'integer') {
       if (name.includes('price') || name.includes('cost') || name.includes('amount')) {
-        return faker.number.float({ min: 10, max: 1000, precision: 0.01 });
+        return faker.number.float({ min: 10, max: 1000, fractionDigits: 2 });
       }
       if (name.includes('rating') || name.includes('score')) {
-        return faker.number.float({ min: 1, max: 5, precision: 0.1 });
+        return faker.number.float({ min: 1, max: 5, fractionDigits: 1 });
       }
       if (name.includes('age')) return faker.number.int({ min: 18, max: 80 });
       if (name.includes('count') || name.includes('quantity') || name.includes('total')) {
@@ -243,7 +289,7 @@ class AIDataEnhancer {
       }
       if (name.includes('port')) return faker.number.int({ min: 1000, max: 65535 });
       if (name.includes('percent') || name.includes('percentage')) {
-        return faker.number.float({ min: 0, max: 100, precision: 0.1 });
+        return faker.number.float({ min: 0, max: 100, fractionDigits: 1 });
       }
       return faker.number.int({ min: 1, max: 1000 });
     }
@@ -263,11 +309,11 @@ class AIDataEnhancer {
     return null;
   }
 
-  postProcessData(data, context) {
+  postProcessData(data: any, context: any): any {
     if (!data || typeof data !== 'object') return data;
     
     // Convert any function values to actual generated values and enhance with context
-    const processValue = (value, key = null) => {
+    const processValue = (value: any, key: string | null = null): any => {
       if (typeof value === 'function') {
         return value();
       }
@@ -275,7 +321,7 @@ class AIDataEnhancer {
         return value.map((item, index) => processValue(item, `${key}[${index}]`));
       }
       if (value && typeof value === 'object') {
-        const processed = {};
+        const processed: any = {};
         Object.keys(value).forEach(objKey => {
           processed[objKey] = processValue(value[objKey], objKey);
         });
@@ -300,11 +346,11 @@ class AIDataEnhancer {
     return processValue(data);
   }
 
-  fallbackGeneration(schema) {
+  fallbackGeneration(schema: any): any {
     if (!schema) return {};
     
     if (schema.type === 'object' && schema.properties) {
-      const result = {};
+      const result: any = {};
       Object.keys(schema.properties).forEach(key => {
         result[key] = this.generateSimpleValue(schema.properties[key]);
       });
@@ -314,7 +360,7 @@ class AIDataEnhancer {
     return this.generateSimpleValue(schema);
   }
 
-  generateSimpleValue(schema, propertyName = null) {
+  generateSimpleValue(schema: any, propertyName: string | null = null): any {
     if (!schema.type) return null;
     
     switch (schema.type) {
@@ -326,7 +372,7 @@ class AIDataEnhancer {
         }
         return faker.lorem.word();
       case 'number':
-        return faker.number.float({ min: 1, max: 100, precision: 0.01 });
+        return faker.number.float({ min: 1, max: 100, fractionDigits: 2 });
       case 'integer':
         return faker.number.int({ min: 1, max: 100 });
       case 'boolean':
@@ -341,13 +387,13 @@ class AIDataEnhancer {
   }
 
   // Generate test scenarios with advanced patterns using factories and modern libraries
-  async generateTestScenarios(schema, count = 5) {
-    const scenarios = [];
+  async generateTestScenarios(schema: any, count: number = 5): Promise<TestScenario[]> {
+    const scenarios: TestScenario[] = [];
     
     for (let i = 0; i < count; i++) {
       try {
-        let scenario;
-        let scenarioType;
+        let scenario: any;
+        let scenarioType: string;
         
         if (i === 0) {
           // First scenario: typical/realistic data using factories when possible
@@ -389,7 +435,7 @@ class AIDataEnhancer {
     return scenarios;
   }
   
-  async generateEdgeCaseData(schema) {
+  async generateEdgeCaseData(schema: any): Promise<any> {
     // Generate edge cases with boundary values
     const edgeCase = await this.generateFromSchema(schema, { type: 'edge_case' });
     
@@ -414,14 +460,14 @@ class AIDataEnhancer {
     return edgeCase;
   }
   
-  async generateMinimalData(schema) {
+  async generateMinimalData(schema: any): Promise<any> {
     // Generate only required fields with minimal values
     if (!schema.properties) return {};
     
-    const minimal = {};
+    const minimal: any = {};
     const required = schema.required || [];
     
-    required.forEach(key => {
+    required.forEach((key: string) => {
       const prop = schema.properties[key];
       if (prop) {
         minimal[key] = this.generateMinimalValue(prop, key);
@@ -431,7 +477,7 @@ class AIDataEnhancer {
     return minimal;
   }
   
-  generateMinimalValue(schema, propertyName) {
+  generateMinimalValue(schema: any, propertyName: string): any {
     switch (schema.type) {
       case 'string':
         return schema.minLength ? 'a'.repeat(schema.minLength) : 'test';
@@ -450,8 +496,8 @@ class AIDataEnhancer {
     }
   }
   
-  getScenarioDescription(type) {
-    const descriptions = {
+  getScenarioDescription(type: string): string {
+    const descriptions: { [key: string]: string } = {
       realistic: 'Realistic data with typical values',
       edge_case: 'Edge cases with boundary and special values',
       minimal: 'Minimal valid data with only required fields',
@@ -463,4 +509,4 @@ class AIDataEnhancer {
   }
 }
 
-module.exports = AIDataEnhancer;
+export default AIDataEnhancer;

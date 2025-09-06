@@ -1,8 +1,10 @@
-const express = require('express');
-const { v4: uuidv4 } = require('uuid');
-const { faker } = require('@faker-js/faker');
-const SmartDataGenerator = require('../services/dataGenerator');
-const PersistentStorage = require('../services/persistentStorage');
+import express, { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
+import { faker } from '@faker-js/faker';
+import SmartDataGenerator from '../services/dataGenerator.js';
+import PersistentStorage from '../services/persistentStorage.js';
+import { OpenAPISpec, SpecData } from '../../types';
+
 const router = express.Router();
 
 // Initialize advanced data generator
@@ -10,46 +12,50 @@ const dataGenerator = new SmartDataGenerator();
 const storage = new PersistentStorage();
 
 // Load persistent data on startup
-let specs, mockData;
-(async () => {
-  specs = await storage.loadSpecs();
-  mockData = await storage.loadMockData();
-})();
+let specs: Map<string, SpecData> = new Map();
+let mockData: Map<string, any> = new Map();
 
-// Import specs from specs.js module
-const specsModule = require('./specs');
-
-// Get specs from the specs module
-function getSpecs() {
-  // Access the specs Map from the specs module
+// Initialize data loading
+async function initializeData() {
   try {
-    const specsRoute = require('./specs');
-    // Since we can't directly access the Map, we'll create our own storage
-    // This will be populated when specs are imported
-    return specs;
+    specs = await storage.loadSpecs();
+    mockData = await storage.loadMockData();
+    console.log(`Mock route initialized with ${specs.size} specs`);
   } catch (error) {
-    return new Map();
+    console.error('Error loading persistent data in mock route:', error);
   }
 }
 
+initializeData();
+
+// Get specs from the specs module
+function getSpecs(): Map<string, SpecData> {
+  return specs;
+}
+
+interface MatchingRoute {
+  path: string;
+  operation: any;
+}
+
 // Helper function to find matching route
-function findMatchingRoute(method, path, specData) {
+function findMatchingRoute(method: string, path: string, specData: SpecData): MatchingRoute | null {
   const paths = specData.spec_data?.paths || {};
   
   // Try exact match first
-  if (paths[path] && paths[path][method.toLowerCase()]) {
-    return { path, operation: paths[path][method.toLowerCase()] };
+  if (paths[path] && (paths[path] as any)[method.toLowerCase()]) {
+    return { path, operation: (paths[path] as any)[method.toLowerCase()] };
   }
   
   // Try parameter matching (e.g., /pet/{petId} matches /pet/123)
   for (const [specPath, methods] of Object.entries(paths)) {
-    if (methods[method.toLowerCase()]) {
+    if ((methods as any)[method.toLowerCase()]) {
       // Convert OpenAPI path parameters to regex
       const regexPath = specPath.replace(/\{[^}]+\}/g, '([^/]+)');
       const regex = new RegExp(`^${regexPath}$`);
       
       if (regex.test(path)) {
-        return { path: specPath, operation: methods[method.toLowerCase()] };
+        return { path: specPath, operation: (methods as any)[method.toLowerCase()] };
       }
     }
   }
@@ -58,7 +64,7 @@ function findMatchingRoute(method, path, specData) {
 }
 
 // Generate mock response based on OpenAPI schema
-function generateMockResponse(operation, method, path, specData = null) {
+function generateMockResponse(operation: any, method: string, path: string, specData: SpecData | null = null): any {
   const responses = operation.responses || {};
   const successResponse = responses['200'] || responses['201'] || responses['default'];
   
@@ -76,7 +82,7 @@ function generateMockResponse(operation, method, path, specData = null) {
 }
 
 // Generate data from OpenAPI schema with context
-function generateFromSchemaWithContext(schema, method, path, specData = null, propertyName = null) {
+function generateFromSchemaWithContext(schema: any, method: string, path: string, specData: SpecData | null = null, propertyName: string | null = null): any {
   if (!schema) return {};
   
   if (schema.$ref) {
@@ -85,8 +91,8 @@ function generateFromSchemaWithContext(schema, method, path, specData = null, pr
     let resolvedSchema = specData?.spec_data;
     
     for (const segment of refPath) {
-      if (resolvedSchema && resolvedSchema[segment]) {
-        resolvedSchema = resolvedSchema[segment];
+      if (resolvedSchema && (resolvedSchema as any)[segment]) {
+        resolvedSchema = (resolvedSchema as any)[segment];
       } else {
         // Fallback if reference can't be resolved
         return { id: Math.floor(Math.random() * 1000), name: "Mock Item", status: "active" };
@@ -111,7 +117,7 @@ function generateFromSchemaWithContext(schema, method, path, specData = null, pr
   }
   
   if (schema.type === 'object' || schema.properties) {
-    const result = {};
+    const result: any = {};
     const properties = schema.properties || {};
     
     Object.entries(properties).forEach(([key, propSchema]) => {
@@ -132,23 +138,31 @@ function generateFromSchemaWithContext(schema, method, path, specData = null, pr
   switch (schema.type) {
     case 'string':
       if (schema.enum) return schema.enum[0];
-      if (schema.format === 'email') return 'mock@example.com';
+      if (schema.format === 'email') return faker.internet.email();
       if (schema.format === 'date-time') return new Date().toISOString();
       if (propertyName) return generateContextualValue(propertyName);
-      return schema.example || 'mock string';
+      return schema.example || faker.lorem.words({ min: 1, max: 2 });
     case 'integer':
     case 'number':
+      if (propertyName && propertyName.toLowerCase().includes('id')) {
+        return Math.floor(Math.random() * 100000) + 1; // Generate unique ID for any ID field
+      }
       return schema.example || Math.floor(Math.random() * 100);
     case 'boolean':
-      return schema.example || true;
+      return schema.example !== undefined ? schema.example : faker.datatype.boolean();
     default:
-      return schema.example || `mock ${schema.type || 'value'}`;
+      return schema.example || faker.lorem.word();
   }
 }
 
 // Helper function for contextual value generation - works for any API
-function generateContextualValue(propertyName) {
+function generateContextualValue(propertyName: string): any {
   const lowerName = propertyName.toLowerCase();
+  
+  // ID patterns - handle any ID field
+  if (lowerName.includes('id') && (lowerName.endsWith('id') || lowerName.startsWith('id'))) {
+    return Math.floor(Math.random() * 100000) + 1;
+  }
   
   // URL patterns - generic for any API
   if (lowerName.includes('url') || lowerName.includes('link') || lowerName.includes('uri')) {
@@ -274,19 +288,15 @@ function generateContextualValue(propertyName) {
   
   // Username patterns
   if (lowerName.includes('username') || lowerName.includes('handle')) {
-    return faker.internet.userName();
+    return faker.internet.username();
   }
   
-  return `mock ${propertyName}`;
-}
-
-// Helper function to randomly choose from an array
-function randomChoice(array) {
-  return array[Math.floor(Math.random() * array.length)];
+  // Generate random string for any unmatched property
+  return faker.lorem.words({ min: 1, max: 3 });
 }
 
 // Generate data from OpenAPI schema
-function generateFromSchema(schema, method, path, specData = null) {
+function generateFromSchema(schema: any, method: string, path: string, specData: SpecData | null = null): any {
   if (!schema) return {};
   
   if (schema.$ref) {
@@ -295,8 +305,8 @@ function generateFromSchema(schema, method, path, specData = null) {
     let resolvedSchema = specData?.spec_data;
     
     for (const segment of refPath) {
-      if (resolvedSchema && resolvedSchema[segment]) {
-        resolvedSchema = resolvedSchema[segment];
+      if (resolvedSchema && (resolvedSchema as any)[segment]) {
+        resolvedSchema = (resolvedSchema as any)[segment];
       } else {
         // Fallback if reference can't be resolved
         return { id: Math.floor(Math.random() * 1000), name: "Mock Item", status: "active" };
@@ -317,7 +327,7 @@ function generateFromSchema(schema, method, path, specData = null) {
   }
   
   if (schema.type === 'object' || schema.properties) {
-    const result = {};
+    const result: any = {};
     const properties = schema.properties || {};
     
     Object.entries(properties).forEach(([key, propSchema]) => {
@@ -338,21 +348,21 @@ function generateFromSchema(schema, method, path, specData = null) {
   switch (schema.type) {
     case 'string':
       if (schema.enum) return schema.enum[0];
-      if (schema.format === 'email') return 'mock@example.com';
+      if (schema.format === 'email') return faker.internet.email();
       if (schema.format === 'date-time') return new Date().toISOString();
-      return schema.example || 'mock string';
+      return schema.example || faker.lorem.words({ min: 1, max: 2 });
     case 'integer':
     case 'number':
       return schema.example || Math.floor(Math.random() * 100);
     case 'boolean':
-      return schema.example || true;
+      return schema.example !== undefined ? schema.example : faker.datatype.boolean();
     default:
-      return schema.example || `mock ${schema.type || 'value'}`;
+      return schema.example || faker.lorem.word();
   }
 }
 
 // Handle all mock API requests
-router.all('/*', async (req, res) => {
+router.all('/*', async (req: Request, res: Response) => {
   try {
     const { method } = req;
     const requestPath = req.path;
@@ -360,8 +370,8 @@ router.all('/*', async (req, res) => {
     console.log(`Mock API request: ${method} ${requestPath}`);
     
     // Find the spec that contains this endpoint
-    let matchingSpec = null;
-    let matchingRoute = null;
+    let matchingSpec: SpecData | null = null;
+    let matchingRoute: MatchingRoute | null = null;
     
     for (const [specId, specData] of specs.entries()) {
       const route = findMatchingRoute(method, requestPath, specData);
@@ -373,12 +383,28 @@ router.all('/*', async (req, res) => {
     }
     
     if (!matchingRoute) {
-      return res.status(404).json({
-        error: 'Mock endpoint not found',
-        message: `No mock available for ${method} ${requestPath}`,
-        availableSpecs: Array.from(specs.keys()),
-        tip: 'Make sure you have imported an API specification that includes this endpoint'
-      });
+      // Refresh specs in case they were updated after initialization
+      await initializeData();
+      
+      // Try again after refresh
+      for (const [specId, specData] of specs.entries()) {
+        const route = findMatchingRoute(method, requestPath, specData);
+        if (route) {
+          matchingSpec = specData;
+          matchingRoute = route;
+          break;
+        }
+      }
+      
+      if (!matchingRoute) {
+        return res.status(404).json({
+          error: 'Mock endpoint not found',
+          message: `No mock available for ${method} ${requestPath}`,
+          availableSpecs: Array.from(specs.keys()),
+          availableSpecNames: Array.from(specs.values()).map(s => s.spec_name),
+          tip: 'Make sure you have imported an API specification that includes this endpoint'
+        });
+      }
     }
     
     // Handle stateful operations - improved key generation logic
@@ -391,16 +417,33 @@ router.all('/*', async (req, res) => {
       // Generate proper response based on the response schema, not just the request body
       const mockResponse = generateMockResponse(matchingRoute.operation, method, requestPath, matchingSpec);
       
+      // Generate unique ID for new resources
+      const uniqueId = req.body.id || mockResponse.id || Math.floor(Math.random() * 100000) + 1;
+      
       // Merge request data with generated response to maintain stateful behavior
       const storedData = {
         ...mockResponse,
         ...req.body,
-        id: req.body.id || mockResponse.id || uuidv4(),
+        id: uniqueId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
       
-      mockData.set(baseDataKey, storedData);
+      // For POST requests, use unique key to store multiple items
+      const storageKey = method === 'POST' ? `${baseDataKey}/${uniqueId}` : baseDataKey;
+      mockData.set(storageKey, storedData);
+      
+      // Also maintain a collection for GET requests
+      if (method === 'POST') {
+        const collectionKey = baseDataKey;
+        let collection = mockData.get(collectionKey) || [];
+        if (!Array.isArray(collection)) {
+          collection = [collection]; // Convert single item to array
+        }
+        collection.push(storedData);
+        mockData.set(collectionKey, collection);
+      }
+      
       await storage.saveMockData(mockData);
       console.log(`Stored data for key: ${baseDataKey}`, storedData);
       
@@ -410,7 +453,7 @@ router.all('/*', async (req, res) => {
         _mock: {
           endpoint: requestPath,
           method: method,
-          spec: matchingSpec.name,
+          spec: matchingSpec?.spec_name || 'unknown',
           timestamp: new Date().toISOString(),
           stateful: true
         }
@@ -421,7 +464,7 @@ router.all('/*', async (req, res) => {
     }
     
     // Generate response
-    let responseData;
+    let responseData: any;
     
     if (method === 'GET') {
       // Try to find stored data for GET requests
@@ -465,7 +508,7 @@ router.all('/*', async (req, res) => {
       _mock: {
         endpoint: requestPath,
         method: method,
-        spec: matchingSpec.name,
+        spec: matchingSpec?.spec_name || 'unknown',
         timestamp: new Date().toISOString(),
         stateful: mockData.has(baseDataKey)
       }
@@ -480,7 +523,7 @@ router.all('/*', async (req, res) => {
     console.error('Mock API error:', error);
     res.status(500).json({
       error: 'Mock API error',
-      message: error.message,
+      message: error instanceof Error ? error.message : 'Unknown error',
       path: req.path,
       method: req.method
     });
@@ -488,9 +531,9 @@ router.all('/*', async (req, res) => {
 });
 
 // Export function to register specs
-router.registerSpec = function(specId, specData) {
+(router as any).registerSpec = function(specId: string, specData: SpecData) {
   specs.set(specId, specData);
-  console.log(`Registered spec for mocking: ${specData.name} (${specId})`);
+  console.log(`Registered spec for mocking: ${specData.spec_name} (${specId})`);
 };
 
-module.exports = router;
+export default router;

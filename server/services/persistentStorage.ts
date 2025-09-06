@@ -1,7 +1,13 @@
-const fs = require('fs').promises;
-const path = require('path');
+import { promises as fs } from 'fs';
+import path from 'path';
+import { SpecData, MockoonEnvironment } from '../../types';
 
-class PersistentStorage {
+export class PersistentStorage {
+  private dataDir: string;
+  private specsFile: string;
+  private mockDataFile: string;
+  private environmentsFile: string;
+
   constructor() {
     this.dataDir = path.join(__dirname, '../data');
     this.specsFile = path.join(this.dataDir, 'specs.json');
@@ -11,22 +17,22 @@ class PersistentStorage {
     this.ensureDataDirectory();
   }
 
-  async ensureDataDirectory() {
+  async ensureDataDirectory(): Promise<void> {
     try {
       await fs.mkdir(this.dataDir, { recursive: true });
-    } catch (error) {
+    } catch (error: any) {
       if (error.code !== 'EEXIST') {
         console.error('Error creating data directory:', error);
       }
     }
   }
 
-  async loadSpecs() {
+  async loadSpecs(): Promise<Map<string, SpecData>> {
     try {
       const data = await fs.readFile(this.specsFile, 'utf8');
       const parsed = JSON.parse(data);
       return new Map(Object.entries(parsed));
-    } catch (error) {
+    } catch (error: any) {
       if (error.code === 'ENOENT') {
         return new Map(); // File doesn't exist, return empty Map
       }
@@ -35,7 +41,7 @@ class PersistentStorage {
     }
   }
 
-  async saveSpecs(specsMap) {
+  async saveSpecs(specsMap: Map<string, SpecData>): Promise<void> {
     try {
       const obj = Object.fromEntries(specsMap);
       await fs.writeFile(this.specsFile, JSON.stringify(obj, null, 2));
@@ -44,12 +50,12 @@ class PersistentStorage {
     }
   }
 
-  async loadMockData() {
+  async loadMockData(): Promise<Map<string, any>> {
     try {
       const data = await fs.readFile(this.mockDataFile, 'utf8');
       const parsed = JSON.parse(data);
       return new Map(Object.entries(parsed));
-    } catch (error) {
+    } catch (error: any) {
       if (error.code === 'ENOENT') {
         return new Map(); // File doesn't exist, return empty Map
       }
@@ -58,7 +64,7 @@ class PersistentStorage {
     }
   }
 
-  async saveMockData(mockDataMap) {
+  async saveMockData(mockDataMap: Map<string, any>): Promise<void> {
     try {
       const obj = Object.fromEntries(mockDataMap);
       await fs.writeFile(this.mockDataFile, JSON.stringify(obj, null, 2));
@@ -67,12 +73,12 @@ class PersistentStorage {
     }
   }
 
-  async loadEnvironments() {
+  async loadEnvironments(): Promise<Map<string, MockoonEnvironment>> {
     try {
       const data = await fs.readFile(this.environmentsFile, 'utf8');
       const parsed = JSON.parse(data);
       return new Map(Object.entries(parsed));
-    } catch (error) {
+    } catch (error: any) {
       if (error.code === 'ENOENT') {
         return new Map(); // File doesn't exist, return empty Map
       }
@@ -81,7 +87,7 @@ class PersistentStorage {
     }
   }
 
-  async saveEnvironments(environmentsMap) {
+  async saveEnvironments(environmentsMap: Map<string, MockoonEnvironment>): Promise<void> {
     try {
       const obj = Object.fromEntries(environmentsMap);
       await fs.writeFile(this.environmentsFile, JSON.stringify(obj, null, 2));
@@ -91,18 +97,18 @@ class PersistentStorage {
   }
 
   // Helper methods for individual operations
-  async getSpec(id) {
+  async getSpec(id: string): Promise<SpecData | undefined> {
     const specs = await this.loadSpecs();
     return specs.get(id);
   }
 
-  async setSpec(id, spec) {
+  async setSpec(id: string, spec: SpecData): Promise<void> {
     const specs = await this.loadSpecs();
     specs.set(id, spec);
     await this.saveSpecs(specs);
   }
 
-  async deleteSpec(id) {
+  async deleteSpec(id: string): Promise<boolean> {
     const specs = await this.loadSpecs();
     const deleted = specs.delete(id);
     if (deleted) {
@@ -111,18 +117,18 @@ class PersistentStorage {
     return deleted;
   }
 
-  async getMockData(key) {
+  async getMockData(key: string): Promise<any> {
     const mockData = await this.loadMockData();
     return mockData.get(key);
   }
 
-  async setMockData(key, data) {
+  async setMockData(key: string, data: any): Promise<void> {
     const mockData = await this.loadMockData();
     mockData.set(key, data);
     await this.saveMockData(mockData);
   }
 
-  async deleteMockData(key) {
+  async deleteMockData(key: string): Promise<boolean> {
     const mockData = await this.loadMockData();
     const deleted = mockData.delete(key);
     if (deleted) {
@@ -131,18 +137,18 @@ class PersistentStorage {
     return deleted;
   }
 
-  async getEnvironment(id) {
+  async getEnvironment(id: string): Promise<MockoonEnvironment | undefined> {
     const environments = await this.loadEnvironments();
     return environments.get(id);
   }
 
-  async setEnvironment(id, environment) {
+  async setEnvironment(id: string, environment: MockoonEnvironment): Promise<void> {
     const environments = await this.loadEnvironments();
     environments.set(id, environment);
     await this.saveEnvironments(environments);
   }
 
-  async deleteEnvironment(id) {
+  async deleteEnvironment(id: string): Promise<boolean> {
     const environments = await this.loadEnvironments();
     const deleted = environments.delete(id);
     if (deleted) {
@@ -152,20 +158,20 @@ class PersistentStorage {
   }
 
   // Batch operations for better performance
-  async getAllSpecs() {
+  async getAllSpecs(): Promise<Map<string, SpecData>> {
     return await this.loadSpecs();
   }
 
-  async getAllMockData() {
+  async getAllMockData(): Promise<Map<string, any>> {
     return await this.loadMockData();
   }
 
-  async getAllEnvironments() {
+  async getAllEnvironments(): Promise<Map<string, MockoonEnvironment>> {
     return await this.loadEnvironments();
   }
 
   // Clear all data (useful for testing)
-  async clearAll() {
+  async clearAll(): Promise<void> {
     try {
       await Promise.all([
         fs.unlink(this.specsFile).catch(() => {}),
@@ -178,4 +184,4 @@ class PersistentStorage {
   }
 }
 
-module.exports = PersistentStorage;
+export default PersistentStorage;

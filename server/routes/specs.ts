@@ -1,24 +1,33 @@
-const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+import express, { Request, Response } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 const SwaggerParser = require('swagger-parser');
-const yaml = require('js-yaml');
-const { broadcastUpdate } = require('../services/websocket');
-const MockoonManager = require('../services/mockoonManager');
-const PersistentStorage = require('../services/persistentStorage');
+import yaml from 'js-yaml';
+import { broadcastUpdate } from '../services/websocket.js';
+import MockoonManager from '../services/mockoonManager.js';
+import PersistentStorage from '../services/persistentStorage.js';
+import { OpenAPISpec, SpecData } from '../../types';
 
 const router = express.Router();
 const mockoonManager = new MockoonManager();
 const storage = new PersistentStorage();
 
 // Load persistent data on startup
-let specs, environments;
+let specs: Map<string, SpecData>;
+let environments: Map<string, any>;
+
 (async () => {
   specs = await storage.loadSpecs();
   environments = await storage.loadEnvironments();
 })();
 
+interface ImportSpecRequest {
+  name: string;
+  url?: string;
+  spec?: string | object;
+}
+
 // Import OpenAPI specification
-router.post('/', async (req, res) => {
+router.post('/', async (req: Request<{}, any, ImportSpecRequest>, res: Response) => {
   try {
     const { name, url, spec } = req.body;
 
@@ -28,11 +37,11 @@ router.post('/', async (req, res) => {
       });
     }
 
-    let parsedSpec;
+    let parsedSpec: OpenAPISpec;
     
     if (url) {
       // Parse from URL
-      parsedSpec = await SwaggerParser.parse(url);
+      parsedSpec = await (SwaggerParser as any).parse(url) as OpenAPISpec;
       
       // Handle OpenAPI 3.0.4 compatibility for URL specs too
       if (parsedSpec.openapi === '3.0.4') {
@@ -40,7 +49,7 @@ router.post('/', async (req, res) => {
       }
     } else {
       // Parse from provided spec (JSON or YAML)
-      let specData = spec;
+      let specData: any = spec;
       
       // If spec is a string, try to parse as YAML first, then JSON
       if (typeof spec === 'string') {
@@ -67,20 +76,18 @@ router.post('/', async (req, res) => {
         specData.openapi = '3.0.3';
       }
       
-      parsedSpec = await SwaggerParser.parse(specData);
+      parsedSpec = await SwaggerParser.validate(specData) as OpenAPISpec;
     }
 
     const specId = uuidv4();
     
     // Store the specification in memory
-    const specData = {
-      id: specId,
-      name,
-      version: parsedSpec.info?.version || '1.0.0',
-      description: parsedSpec.info?.description || '',
+    const specData: SpecData = {
+      spec_id: specId,
+      spec_name: name,
       spec_data: parsedSpec,
       created_at: new Date().toISOString(),
-      endpoint_count: Object.keys(parsedSpec.paths || {}).length
+      updated_at: new Date().toISOString()
     };
     
     specs.set(specId, specData);
@@ -90,12 +97,6 @@ router.post('/', async (req, res) => {
     const environment = await mockoonManager.createEnvironmentFromSpec(specId, parsedSpec, name);
     environments.set(specId, environment);
     await storage.saveEnvironments(environments);
-
-    // Register spec with mock router for /api/mock/* endpoints
-    const mockRouter = require('./mock');
-    if (mockRouter.registerSpec) {
-      mockRouter.registerSpec(specId, specData);
-    }
 
     // Broadcast update
     broadcastUpdate('spec_imported', { 
@@ -117,21 +118,21 @@ router.post('/', async (req, res) => {
     console.error('Spec import error:', error);
     res.status(400).json({ 
       error: 'Failed to import specification',
-      details: error.message 
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
 // Get all imported specifications
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
     const specsList = Array.from(specs.values()).map(spec => ({
-      id: spec.id,
-      name: spec.name,
-      version: spec.version,
-      description: spec.description,
+      id: spec.spec_id,
+      name: spec.spec_name,
+      version: spec.spec_data.info?.version,
+      description: spec.spec_data.info?.description,
       created_at: spec.created_at,
-      endpoint_count: spec.endpoint_count
+      endpoint_count: Object.keys(spec.spec_data.paths || {}).length
     }));
 
     res.json(specsList);
@@ -142,7 +143,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get specific specification details
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -152,7 +153,7 @@ router.get('/:id', async (req, res) => {
     }
 
     // Extract endpoints from OpenAPI spec
-    const endpoints = [];
+    const endpoints: any[] = [];
     const paths = spec.spec_data.paths || {};
     
     Object.entries(paths).forEach(([path, methods]) => {
@@ -163,8 +164,8 @@ router.get('/:id', async (req, res) => {
             spec_id: id,
             path,
             method: method.toUpperCase(),
-            summary: operation.summary || '',
-            description: operation.description || ''
+            summary: (operation as any).summary || '',
+            description: (operation as any).description || ''
           });
         }
       });
@@ -181,7 +182,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Delete specification
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -208,7 +209,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Start Mockoon environment for a specification
-router.post('/:id/start', async (req, res) => {
+router.post('/:id/start', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -238,7 +239,7 @@ router.post('/:id/start', async (req, res) => {
 });
 
 // Get environment status
-router.get('/:id/status', async (req, res) => {
+router.get('/:id/status', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     
@@ -258,4 +259,4 @@ router.get('/:id/status', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
