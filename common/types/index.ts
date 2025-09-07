@@ -194,8 +194,7 @@ export interface MediaType {
   };
 }
 
-// Mockoon Types (from your index.ts)
-export interface MockoonEnvironment {
+export interface SandboxEnvironment {
   uuid: string;
   lastMigration: number;
   name: string;
@@ -203,7 +202,7 @@ export interface MockoonEnvironment {
   latency: number;
   port: number;
   hostname: string;
-  routes: MockoonRoute[];
+  routes: Route[];
   proxyMode: boolean;
   proxyHost: string;
   proxyRemovePrefix: boolean;
@@ -216,17 +215,17 @@ export interface MockoonEnvironment {
   responseMode?: 'ai' | 'advanced';
 }
 
-export interface MockoonRoute {
+export interface Route {
   uuid: string;
   documentation: string;
   method: string;
   endpoint: string;
-  responses: MockoonResponse[];
+  responses: Response[];
   enabled: boolean;
   responseMode: string;
 }
 
-export interface MockoonResponse {
+export interface Response {
   uuid: string;
   body: string;
   latency: number;

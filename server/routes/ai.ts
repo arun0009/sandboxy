@@ -104,53 +104,13 @@ router.post('/generate-scenarios', async (req: Request<{}, any, GenerateScenario
       scenarios,
       generationMode,
       generatedAt: new Date().toISOString(),
-      message: 'Scenarios generated - storage now handled by Mockoon data buckets'
+      message: 'Scenarios generated successfully'
     });
     
   } catch (error) {
     console.error('Scenario generation error:', error);
     res.status(500).json({ 
       error: 'Failed to generate scenarios',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-});
-
-// Get AI-generated scenarios
-router.get('/scenarios/:specId', async (req: Request, res: Response) => {
-  try {
-    const { specId } = req.params;
-    
-    res.json({
-      message: 'Scenario storage now handled by Mockoon data buckets',
-      specId,
-      info: 'Generated scenarios are stored within Mockoon environments',
-      suggestion: 'Use the /api/specs endpoint to access your Mockoon environments and their data buckets'
-    });
-    
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Service error' });
-  }
-});
-
-// Analyze API usage patterns and suggest improvements
-router.get('/analyze/:specId', async (req: Request, res: Response) => {
-  try {
-    const { specId } = req.params;
-    
-    res.json({
-      message: 'API analysis now handled by Mockoon environments',
-      specId,
-      info: 'Usage statistics and data patterns are tracked within each Mockoon environment',
-      suggestion: 'Check Mockoon CLI logs or GUI for detailed analytics and usage patterns',
-      analyzedAt: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('Analysis error:', error);
-    res.status(500).json({ 
-      error: 'Failed to analyze API',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

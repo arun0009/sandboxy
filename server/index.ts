@@ -9,7 +9,6 @@ import http from 'http';
 
 // Import routes
 import specsRoutes from './routes/specs';
-import dataRoutes from './routes/data';
 import aiRoutes from './routes/ai';
 import mockRoutes from './routes/mock';
 import adminRoutes from './routes/admin';
@@ -34,8 +33,6 @@ async function initializeApp() {
     process.exit(1);
   }
 }
-
-// No more WebSocket server as it's not needed
 
 // Middleware
 app.use(helmet({
@@ -87,7 +84,6 @@ app.get('/health', (req: express.Request, res: express.Response) => {
 
 // API Routes
 app.use('/api/specs', specsRoutes);
-app.use('/api/data', dataRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/admin', adminRoutes);
 

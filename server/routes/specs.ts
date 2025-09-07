@@ -4,7 +4,7 @@ import * as yaml from 'js-yaml';
 import dotenv from 'dotenv';
 import PersistentStorage from '../services/persistentStorage.js';
 import mockRouter from './mock.js';
-import { SpecData, BackendSpecData, MockoonEnvironment, APIResponse, OpenAPISpec, HTTPMethod, SpecId, APIVersion, EndpointPath, isHTTPMethod } from '../../common/types';
+import { SpecData, BackendSpecData, SandboxEnvironment, APIResponse, OpenAPISpec, HTTPMethod, SpecId, APIVersion, EndpointPath, isHTTPMethod } from '../../common/types';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -213,12 +213,12 @@ router.post('/environments', async (req: Request, res: Response<APIResponse>) =>
     const envId = req.body.uuid || uuidv4();
     const now = new Date().toISOString();
 
-    const environment: MockoonEnvironment = {
+    const environment: SandboxEnvironment = {
       uuid: envId,
       name,
       endpointPrefix,
       latency: config.defaultDelay,
-      port: parseInt(process.env.MOCKOON_BASE_PORT || '3001', 10),
+      port: parseInt(process.env.BASE_PORT || '3001', 10),
       hostname,
       routes: [],
       proxyMode: false,

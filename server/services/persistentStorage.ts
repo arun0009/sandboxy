@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { SpecData, MockoonEnvironment, BackendSpecData } from '../../common/types';
+import { SpecData, SandboxEnvironment, BackendSpecData } from '../../common/types';
 
 export class PersistentStorage {
   private dataDir: string;
@@ -9,10 +9,10 @@ export class PersistentStorage {
   private environmentsFile: string;
 
   constructor() {
-    this.dataDir = process.env.MOCKOON_DATA_DIR || path.join(__dirname, '../data');
+    this.dataDir = process.env.DATA_DIR || path.join(__dirname, '../data');
     this.specsFile = path.join(this.dataDir, 'specs.json');
     this.mockDataFile = path.join(this.dataDir, 'mockData.json');
-    this.environmentsFile = path.join(this.dataDir, 'mockoon-environments.json');
+    this.environmentsFile = path.join(this.dataDir, 'environments.json');
     
     this.ensureDataDirectory();
   }
@@ -73,7 +73,7 @@ export class PersistentStorage {
     }
   }
 
-  async loadEnvironments(): Promise<Map<string, MockoonEnvironment>> {
+  async loadEnvironments(): Promise<Map<string, SandboxEnvironment>> {
     try {
       const data = await fs.readFile(this.environmentsFile, 'utf8');
       const parsed = JSON.parse(data);
@@ -87,7 +87,7 @@ export class PersistentStorage {
     }
   }
 
-  async saveEnvironments(environmentsMap: Map<string, MockoonEnvironment>): Promise<void> {
+  async saveEnvironments(environmentsMap: Map<string, SandboxEnvironment>): Promise<void> {
     try {
       const obj = Object.fromEntries(environmentsMap);
       await fs.writeFile(this.environmentsFile, JSON.stringify(obj, null, 2));
@@ -136,12 +136,12 @@ export class PersistentStorage {
     return deleted;
   }
 
-  async getEnvironment(id: string): Promise<MockoonEnvironment | undefined> {
+  async getEnvironment(id: string): Promise<SandboxEnvironment | undefined> {
     const environments = await this.loadEnvironments();
     return environments.get(id);
   }
 
-  async setEnvironment(id: string, environment: MockoonEnvironment): Promise<void> {
+  async setEnvironment(id: string, environment: SandboxEnvironment): Promise<void> {
     const environments = await this.loadEnvironments();
     environments.set(id, environment);
     await this.saveEnvironments(environments);
@@ -164,7 +164,7 @@ export class PersistentStorage {
     return await this.loadMockData();
   }
 
-  async getAllEnvironments(): Promise<Map<string, MockoonEnvironment>> {
+  async getAllEnvironments(): Promise<Map<string, SandboxEnvironment>> {
     return await this.loadEnvironments();
   }
 
