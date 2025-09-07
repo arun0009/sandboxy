@@ -3,7 +3,7 @@ import Ajv from 'ajv';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
 import { faker } from '@faker-js/faker';
-import SmartDataGenerator from '../services/dataGenerator.js';
+import MockDataGenerator from '../services/mockDataGenerator';
 import PersistentStorage from '../services/persistentStorage.js';
 import { BackendSpecData, Operation, GenerationContext } from '../../common/types';
 
@@ -17,7 +17,7 @@ const ajv = new Ajv({ allErrors: true });
 const validModes = ['ai', 'advanced'] as const;
 
 // Initialize services
-const dataGenerator = new SmartDataGenerator();
+const dataGenerator = new MockDataGenerator();
 const storage = new PersistentStorage();
 
 // Load configuration from environment variables
@@ -25,7 +25,6 @@ const config = {
   defaultDelay: parseInt(process.env.MOCK_DELAY || '0', 10),
   defaultMockMode: validModes.includes(process.env.MOCK_MODE as any) ? process.env.MOCK_MODE as 'ai' | 'advanced' : 'advanced',
   enableMockMetadata: process.env.ENABLE_MOCK_METADATA !== 'false',
-  seedData: process.env.SEED_DATA === 'true',
 };
 
 // Load persistent data and configuration on startup
@@ -38,39 +37,12 @@ async function initializeData() {
     mockData = await storage.loadMockData();
     console.log(`Mock route initialized with ${specs.size} specs`);
     console.log('Mock configuration:', config);
-
-    if (config.seedData) {
-      await seedInitialData();
-    }
   } catch (error) {
     console.error('Error loading persistent data in mock route:', error);
   }
 }
 
-async function seedInitialData() {
-  try {
-    for (const [specId, specData] of specs.entries()) {
-      const paths = specData.spec_data?.paths || {};
-      for (const [path, methods] of Object.entries(paths)) {
-        for (const [method, operation] of Object.entries(methods)) {
-          if (method.toLowerCase() === 'get' && operation) {
-            const schema = operation.responses?.['200']?.content?.['application/json']?.schema;
-            if (schema) {
-              const scenarios = await dataGenerator.generateTestScenarios(schema, 3, config.defaultMockMode);
-              const collectionKey = path;
-              const collection = scenarios.map(scenario => scenario.data);
-              await storage.setMockData(collectionKey, collection);
-              console.log(`Seeded data for ${method} ${path}:`, collection);
-            }
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error seeding initial data:', error);
-  }
-}
-
+// Initialize data without seeding to prevent loops
 initializeData();
 
 function getSpecs(): Map<string, BackendSpecData> {
@@ -202,7 +174,7 @@ router.all('/*', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Resource not found' });
     }
     
-    const mockMode = query.mockMode && validModes.includes(query.mockMode as any) && (query.mockMode !== 'ai' || dataGenerator.getAvailableModes().find(m => m.id === 'ai' && m.available))
+    const mockMode = query.mockMode && validModes.includes(query.mockMode as any)
       ? query.mockMode as 'ai' | 'advanced'
       : config.defaultMockMode;
     
@@ -215,7 +187,7 @@ router.all('/*', async (req: Request, res: Response) => {
                     matchingRoute.operation.responses?.['201']?.content?.['application/json']?.schema;
       const context: GenerationContext = { generationMode: mockMode };
       const mockResponse = schema
-        ? await dataGenerator.generateFromSchema(schema, context, matchingSpec?.spec_data)
+        ? await dataGenerator.generateData(schema, context, mockMode)
         : { message: `Mock response for ${method} ${requestPath}` };
       
       // Generate ID based on schema type
@@ -344,7 +316,7 @@ router.all('/*', async (req: Request, res: Response) => {
         const context: GenerationContext = { generationMode: mockMode };
         if (schema) {
           console.log(`Using ${mockMode} generation for ${method} ${requestPath}`);
-          responseData = await dataGenerator.generateFromSchema(schema, context, matchingSpec?.spec_data);
+          responseData = await dataGenerator.generateData(schema, context, mockMode);
           console.log(`Generated mock response for ${method} ${requestPath}`, responseData);
         } else {
           responseData = { message: `Mock response for ${method} ${requestPath}` };

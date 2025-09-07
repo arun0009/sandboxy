@@ -1,10 +1,10 @@
 import express, { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import SmartDataGenerator from '../services/dataGenerator.js';
+import MockDataGenerator from '../services/mockDataGenerator';
 import { OpenAPISchema, GenerationContext, GenerationMode } from '../../common/types';
 
 const router = express.Router();
-const dataGenerator = new SmartDataGenerator();
+const dataGenerator = new MockDataGenerator();
 
 interface GenerateDataRequest {
   schema: OpenAPISchema;
@@ -47,10 +47,7 @@ router.post('/generate-data', async (req: Request<{}, any, GenerateDataRequest>,
       actualMode = 'advanced';
     }
     
-    const generatedData = await dataGenerator.generateFromSchema(schema, {
-      ...context,
-      generationMode: actualMode
-    });
+    const generatedData = await dataGenerator.generateData(schema, context, actualMode);
     
     res.json({
       data: generatedData,
@@ -85,11 +82,7 @@ router.post('/generate-scenarios', async (req: Request<{}, any, GenerateScenario
     
     for (const endpoint of endpoints) {
       try {
-        const endpointScenarios = await dataGenerator.generateTestScenarios(
-          { type: 'object' }, // Basic schema for scenario generation
-          3,
-          generationMode
-        );
+        const endpointScenarios = await dataGenerator.generateTestScenarios({ type: 'object' }, 3);
         
         scenarios.push({
           endpoint: `${endpoint.method} ${endpoint.path}`,
@@ -177,13 +170,10 @@ router.post('/enhance-response', async (req: Request<{}, any, EnhanceResponseReq
     // Generate enhanced response using provided schema or base response structure
     let enhancedResponse: any;
     if (schema) {
-      enhancedResponse = await dataGenerator.generateFromSchema(schema, {
-        ...context,
-        generationMode: isAIAvailable() ? 'ai' : 'advanced'
-      });
+      enhancedResponse = await dataGenerator.generateData(schema, context, isAIAvailable() ? 'ai' : 'advanced');
     } else {
       // Enhance based on existing response structure - fallback to basic generation
-      enhancedResponse = await dataGenerator.generateFromSchema({
+      enhancedResponse = await dataGenerator.generateData({
         type: 'object',
         properties: {
           message: { type: 'string' },
@@ -217,7 +207,7 @@ router.post('/enhance-response', async (req: Request<{}, any, EnhanceResponseReq
 router.get('/status', async (req: Request, res: Response) => {
   try {
     const aiAvailable = isAIAvailable();
-    const modes = dataGenerator.getAvailableModes();
+    const modes = [{ id: 'ai', name: 'AI Generation', available: !!process.env.OPENAI_API_KEY }, { id: 'advanced', name: 'Advanced Generation', available: true }];
     
     res.json({
       aiAvailable,
@@ -230,6 +220,32 @@ router.get('/status', async (req: Request, res: Response) => {
     console.error('AI status check error:', error);
     res.status(500).json({ 
       error: 'Failed to check AI status',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Generate mock data from schema endpoint
+router.post('/generate-from-schema', async (req: Request, res: Response) => {
+  try {
+    const { schema } = req.body;
+    
+    if (!schema) {
+      return res.status(400).json({ error: 'Schema is required' });
+    }
+    
+    // Extract the actual schema from the API response wrapper
+    const actualSchema = schema.data || schema;
+    
+    // Use MockDataGenerator to generate data from schema
+    const generator = new MockDataGenerator();
+    const mockData = await generator.generateData(actualSchema);
+    
+    res.json(mockData);
+  } catch (error) {
+    console.error('Error generating mock data from schema:', error);
+    res.status(500).json({ 
+      error: 'Failed to generate mock data',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

@@ -36,9 +36,9 @@ A smart, stateful API sandbox that turns your OpenAPI specs into realistic mock 
 
 ## Architecture
 
-- **Backend**: Node.js + Express with Mockoon CLI for stateful mocking
+- **Backend**: Node.js + Express with built-in stateful mocking
 - **Frontend**: Modern UI (lightweight, responsive)
-- **Mock Engine**: Mockoon-powered stateful mocking with OpenAPI spec support
+- **Mock Engine**: Custom stateful mocking with OpenAPI spec support
 - **Data Generation**: Smart realistic data generation for testing
 
 ## Usage
@@ -46,8 +46,7 @@ A smart, stateful API sandbox that turns your OpenAPI specs into realistic mock 
 1. Import your OpenAPI specifications
 2. Get instant mock endpoints with stateful data
 3. Test your APIs with the built-in tester
-4. Monitor mock server status and logs
-5. Use realistic generated data for testing
+4. Use realistic generated data for testing
 
 ## API Endpoints
 
@@ -63,7 +62,7 @@ A smart, stateful API sandbox that turns your OpenAPI specs into realistic mock 
 - `GET /api/mock/{resource}/{id}` - Get specific resource by ID
 
 ### Server Management
-- `GET /api/mockoon/*` - Check mock server status and logs
+- `GET /api/mock/*` - Access mock endpoints
 - `GET /health` - Server health check
 
 ## Using Mock APIs via cURL

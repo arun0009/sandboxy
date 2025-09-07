@@ -4,46 +4,56 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import WebSocket from 'ws';
-import http from 'http';
 import path from 'path';
+import http from 'http';
 
-import specsRoutes from './routes/specs.js';
-import dataRoutes from './routes/data.js';
-import aiRoutes from './routes/ai.js';
-import mockoonRoutes from './routes/mockoon.js';
-import mockRoutes from './routes/mock.js';
+// Import routes
+import specsRoutes from './routes/specs';
+import dataRoutes from './routes/data';
+import aiRoutes from './routes/ai';
+import mockRoutes from './routes/mock';
+import adminRoutes from './routes/admin';
+
+// Import services
+import database from './services/database';
+import config from './services/config';
+
+// __dirname is available in CommonJS by default
 
 const app = express();
 const server = http.createServer(app);
 
-// Initialize WebSocket server
-const wss = new WebSocket.Server({ server, path: '/ws' });
-
-// Store WebSocket connections
-declare global {
-  var wsConnections: Set<WebSocket>;
+// Initialize database
+async function initializeApp() {
+  try {
+    await database.init();
+    console.log('Database initialized');
+    startServer();
+  } catch (error) {
+    console.error('Failed to initialize application:', error);
+    process.exit(1);
+  }
 }
 
-global.wsConnections = new Set();
-
-wss.on('connection', (ws: WebSocket) => {
-  global.wsConnections.add(ws);
-  console.log('WebSocket client connected');
-  
-  ws.on('close', () => {
-    global.wsConnections.delete(ws);
-    console.log('WebSocket client disconnected');
-  });
-  
-  ws.on('error', (error: Error) => {
-    console.error('WebSocket error:', error);
-    global.wsConnections.delete(ws);
-  });
-});
+// No more WebSocket server as it's not needed
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+}));
 app.use(compression());
 app.use(morgan('combined'));
 
@@ -56,7 +66,7 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // CORS configuration
-const corsOptions: cors.CorsOptions = {
+const corsOptions = {
   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
   credentials: true,
   optionsSuccessStatus: 200
@@ -67,7 +77,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (req: express.Request, res: express.Response) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
@@ -79,96 +89,76 @@ app.get('/health', (req: Request, res: Response) => {
 app.use('/api/specs', specsRoutes);
 app.use('/api/data', dataRoutes);
 app.use('/api/ai', aiRoutes);
-app.use('/api/mockoon', mockoonRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Mock API routing - handle /api/mock/* requests
 app.use('/api/mock', mockRoutes);
 
-// Serve static files from public directory with proper MIME types
-// First serve from public/public (compiled frontend files)
-app.use(express.static(path.join(__dirname, '../public/public'), {
-  setHeaders: (res, path) => {
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, '../public'), {
+  setHeaders(res: express.Response, path: string) {
     if (path.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript');
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json');
     }
   }
 }));
 
-// Then serve from public root (for server types and other files)
-app.use(express.static(path.join(__dirname, '../public'), {
-  setHeaders: (res, path) => {
-    if (path.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    }
-  }
-}));
+// Admin route
+app.get('/admin', (req: express.Request, res: express.Response) => {
+  res.sendFile(path.join(process.cwd(), 'public/admin.html'));
+});
 
 // Serve frontend for all non-API routes
-app.get('*', (req: Request, res: Response): void => {
+app.get('*', (req: express.Request, res: express.Response) => {
   // Skip API routes
   if (req.path.startsWith('/api/')) {
-    res.status(404).json({ 
-      error: 'API route not found',
-      path: req.originalUrl,
-      method: req.method
-    });
     return;
   }
   
-  // Skip static files (js, css, map files, etc.)
-  if (req.path.match(/\.(js|css|map|ico|png|jpg|jpeg|gif|svg)$/)) {
-    res.status(404).json({
-      error: 'Static file not found',
-      path: req.originalUrl
-    });
-    return;
-  }
-  
-  // Serve simple HTML frontend
+  // Serve index.html for all other routes to support client-side routing
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// Global error handler
-app.use((error: Error & { status?: number }, req: Request, res: Response, next: NextFunction) => {
-  console.error('Global error handler:', error);
-  res.status(error.status || 500).json({
-    error: error.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+// Error handling middleware
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Error:', err);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
   });
 });
 
-// Start server without database initialization
-const PORT = process.env.PORT || 3001;
-
-function startServer(): void {
-  try {
-    server.listen(PORT, () => {
-      console.log(`Smart API Sandbox server running on port ${PORT}`);
-      console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`Using Mockoon for stateful API mocking`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
+// Start server
+function startServer() {
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`API Documentation: http://localhost:${PORT}/api-docs`);
+    console.log(`Mock API Base URL: http://localhost:${PORT}/api/mock`);
+  });
 }
 
-startServer();
+// Start the application
+initializeApp();
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
+  console.log('SIGTERM received. Shutting down gracefully...');
+  
+  // Close HTTP server
   server.close(() => {
-    console.log('Server closed');
+    console.log('HTTP server closed');
     process.exit(0);
   });
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
-  });
+  
+  // Force close server after 10 seconds
+  setTimeout(() => {
+    console.error('Forcing server shutdown');
+    process.exit(1);
+  }, 10000);
 });

@@ -114,7 +114,7 @@ npm run server
 
 ## Features Overview
 
-### ✅ Completed Features
+### Completed Features
 
 - **OpenAPI Spec Import**: Import from URL or paste JSON/YAML
 - **Stateful Mocking**: POST data persists and can be retrieved via GET
@@ -124,7 +124,7 @@ npm run server
 - **Analytics Dashboard**: Request patterns, response times, error rates
 - **API Testing Interface**: Interactive testing with smart data generation
 
-### 🎯 Key Capabilities
+### Key Capabilities
 
 1. **Smart Data Generation**:
    - Context-aware fake data based on field names

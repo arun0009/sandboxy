@@ -3,9 +3,7 @@ import {
   SpecData,
   BackendSpecData,
   EndpointData,
-  MockoonStatus,
   GenerationModesResponse,
-  TestRequestOptions,
   FetchResult,
   getElementByIdSafe,
   EventHandler,
@@ -35,9 +33,10 @@ type AppEvents = {
 };
 
 class APISandboxApp extends TypedEventEmitter<AppEvents> {
-  private readonly baseURL: string = '';
+  private readonly baseURL: string = '/api'; // Base URL for all API requests
   private readonly requestTimeout = 10000; // 10 seconds
   private readonly debouncedSearch = debounce(this.performSearch.bind(this), 300);
+  private currentSpecId: string | null = null; // Track current spec being viewed
 
   constructor() {
     super();
@@ -46,7 +45,6 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
   private init(): void {
     document.addEventListener('DOMContentLoaded', () => {
-      this.checkMockoonStatus();
       this.checkAIStatus();
       this.setupEventListeners();
       this.loadSpecs();
@@ -57,12 +55,9 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     const eventMappings: ReadonlyArray<readonly [string, EventHandler | AsyncEventHandler]> = [
       ['import-spec-btn', this.openSpecModal.bind(this)],
       ['view-specs-btn', this.loadSpecs.bind(this)],
-      ['mockoon-status-btn', this.checkMockoonStatus.bind(this)],
-      ['monitor-btn', this.viewLogs.bind(this)],
-      ['quick-test-btn', this.showEndpointTester.bind(this)],
+      ['close-modal-btn', this.closeSpecModal.bind(this)],
       ['send-test-request-btn', this.sendTestRequest.bind(this)],
       ['hide-tester-btn', this.hideTester.bind(this)],
-      ['close-modal-btn', this.closeSpecModal.bind(this)],
     ] as const;
 
     eventMappings.forEach(([id, handler]) => {
@@ -98,42 +93,6 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     const modal = getElementByIdSafe('specModal', 'div');
     if (modal) {
       modal.style.display = 'none';
-    }
-  }
-
-  private viewLogs(): void {
-    this.closeAllDynamicSections();
-
-    const logsSection = this.createDynamicSection('logsSection', 'System Logs', `
-      <div id="logsContent" class="response-area">
-        <div class="response-header">
-          <span class="response-status">Loading logs...</span>
-        </div>
-      </div>
-    `);
-
-    const container = document.querySelector('.container');
-    if (container) {
-      container.appendChild(logsSection);
-    }
-
-    this.fetchLogs();
-  }
-
-  private async fetchLogs(): Promise<void> {
-    try {
-      const response = await fetch('/api/data/logs');
-      const logs = await response.json();
-
-      const logsContent = getElementByIdSafe('logsContent', HTMLDivElement);
-      if (logsContent) {
-        logsContent.innerHTML = this.createResponseHTML('System Logs', logs, 'success');
-      }
-    } catch (error) {
-      const logsContent = getElementByIdSafe('logsContent', HTMLDivElement);
-      if (logsContent) {
-        logsContent.innerHTML = this.createErrorHTML('Error Loading Logs', (error as Error).message);
-      }
     }
   }
 
@@ -181,112 +140,6 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.displayResponse({ success: false, error: errorMessage });
       return Err(error instanceof Error ? error : new Error(errorMessage));
-    }
-  }
-
-  private async testCustomAPI(): Promise<void> {
-    const endpointInput = getElementByIdSafe('testPath', HTMLInputElement);
-    const methodSelect = getElementByIdSafe('testMethod', HTMLSelectElement);
-    const bodyTextArea = getElementByIdSafe('testBody', HTMLTextAreaElement);
-
-    const endpoint = endpointInput?.value || '/api/specs';
-    const method = methodSelect?.value || 'GET';
-    const bodyText = bodyTextArea?.value || '';
-
-    let body = null;
-    if (bodyText.trim() && method !== 'GET') {
-      try {
-        body = JSON.parse(bodyText);
-      } catch (e) {
-        this.displayResponse({ success: false, error: 'Invalid JSON in request body' });
-        return;
-      }
-    }
-
-    await this.testAPI(endpoint as EndpointPath, method as HTTPMethod, body);
-  }
-
-  private async checkMockoonStatus(): Promise<Result<MockoonStatus>> {
-    try {
-      const response = await withTimeout(fetch('/api/mockoon/status'), this.requestTimeout);
-      const data = await response.json() as MockoonStatus;
-
-      this.updateMockoonBadge(data, response.ok);
-      this.createMockoonStatusSection(data, response.ok);
-
-      const status: StatusBadgeType = data.available && data.runningInstances > 0
-        ? 'success'
-        : data.available
-        ? 'warning'
-        : 'error';
-
-      this.emit('statusUpdated', { service: 'mockoon', status });
-
-      return Ok(data);
-    } catch (error) {
-      this.handleMockoonError(error as Error);
-      this.emit('statusUpdated', { service: 'mockoon', status: 'error' });
-      return Err(error instanceof Error ? error : new Error('Unknown error'));
-    }
-  }
-
-  private updateMockoonBadge(data: MockoonStatus, isOk: boolean): void {
-    const badge = getElementByIdSafe('mockoon-status', 'span');
-    if (!badge) return;
-
-    const getBadgeConfig = (status: MockoonStatus, ok: boolean): { text: string; type: StatusBadgeType } => {
-      if (!ok) return { text: 'Error', type: 'error' };
-
-      if (status.available) {
-        return status.runningInstances > 0
-          ? { text: 'Running', type: 'success' }
-          : { text: 'Available', type: 'warning' };
-      }
-
-      return { text: 'Unavailable', type: 'error' };
-    };
-
-    const { text, type } = getBadgeConfig(data, isOk);
-    badge.textContent = text;
-    badge.className = `status-badge ${type}`;
-  }
-
-  private createMockoonStatusSection(data: MockoonStatus, isOk: boolean): void {
-    let statusSection = getElementByIdSafe('mockoonStatusSection', HTMLDivElement);
-    if (!statusSection) {
-      statusSection = this.createDynamicSection(
-        'mockoonStatusSection',
-        'Mockoon Status',
-        '<div id="mockoonStatusContent" class="response-area"></div>'
-      );
-
-      const cardsSection = document.querySelector('.cards');
-      if (cardsSection?.parentNode) {
-        cardsSection.parentNode.insertBefore(statusSection, cardsSection.nextSibling);
-      }
-    }
-
-    const statusContent = getElementByIdSafe('mockoonStatusContent', HTMLDivElement);
-    if (statusContent) {
-      if (isOk) {
-        const statusClass = data.runningInstances > 0 ? 'success' : 'warning';
-        statusContent.innerHTML = this.createResponseHTML('Mock Server Status', data, statusClass);
-      } else {
-        statusContent.innerHTML = this.createErrorHTML('Mock Server Error', data.error || 'Unknown error');
-      }
-    }
-  }
-
-  private handleMockoonError(error: Error): void {
-    const badge = getElementByIdSafe('mockoon-status', HTMLSpanElement);
-    if (badge) {
-      badge.textContent = 'Unavailable';
-      badge.className = 'status-badge warning';
-    }
-
-    const statusContent = getElementByIdSafe('mockoonStatusContent', HTMLDivElement);
-    if (statusContent) {
-      statusContent.innerHTML = this.createErrorHTML('Connection Failed', error.message);
     }
   }
 
@@ -412,6 +265,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
     if (endpointsContainer.style.display === 'block') {
       endpointsContainer.style.display = 'none';
+      this.currentSpecId = null; // Clear current spec when hiding
       return;
     }
 
@@ -419,6 +273,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
       const response = await fetch(`/api/specs/${specId}`);
       const result = await response.json() as APIResponse<BackendSpecData>;
       if (result.success && result.data) {
+        this.currentSpecId = specId; // Set current spec when loading
         const endpoints = this.extractEndpoints(result.data.spec_data);
         this.displayEndpoints(endpoints, specId);
         endpointsContainer.style.display = 'block';
@@ -442,7 +297,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
     container.innerHTML = `
       <h4>Available Endpoints:</h4>
-      <p><strong>💡 How to test:</strong> Your endpoints are available at <code>/api/mock{path}</code>. Click "Test" to try them!</p>
+      <p><strong>How to test:</strong> Your endpoints are available at <code>/api/mock{path}</code>. Click "Test" to try them!</p>
       ${endpoints.map(endpoint => `
         <div class="endpoint-item">
           <div>
@@ -450,7 +305,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
             <strong>/api/mock${endpoint.path}</strong>
             <small style="color: #6c757d; margin-left: 10px;">(spec: ${endpoint.path})</small>
           </div>
-          <button class="test-endpoint-btn" data-method="${endpoint.method}" data-path="/api/mock${endpoint.path}">Test</button>
+          <button class="test-endpoint-btn" data-method="${endpoint.method}" data-original-path="${endpoint.path}" data-full-path="/api/mock${endpoint.path}">Test</button>
         </div>
       `).join('')}
     `;
@@ -463,15 +318,16 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
       btn.addEventListener('click', (e) => {
         const button = e.target as HTMLButtonElement;
         const method = button.getAttribute('data-method');
-        const path = button.getAttribute('data-path');
-        if (method && path) {
-          this.testEndpoint(method, path);
+        const fullPath = button.getAttribute('data-full-path');
+        const originalPath = button.getAttribute('data-original-path');
+        if (method && fullPath) {
+          this.testEndpoint(method, fullPath, originalPath || undefined);
         }
       });
     });
   }
 
-  private testEndpoint(method: string, path: string): void {
+  private async testEndpoint(method: string, fullPath: string, originalPath?: string): Promise<void> {
     const methodSelect = getElementByIdSafe('testMethod', HTMLSelectElement);
     const pathInput = getElementByIdSafe('testPath', HTMLInputElement);
     const testerSection = getElementByIdSafe('testerSection', HTMLDivElement);
@@ -479,35 +335,122 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     const responseContainer = getElementByIdSafe('testResponse', HTMLDivElement);
 
     if (methodSelect) methodSelect.value = method;
-    if (pathInput) pathInput.value = path;
-    if (testerSection) testerSection.style.display = 'block';
+    if (pathInput) pathInput.value = fullPath;
+    if (testerSection) {
+      testerSection.style.display = 'block';
+      // Scroll to the tester section
+      testerSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 
     if (responseContainer) {
       responseContainer.innerHTML = '';
     }
 
     if (bodyTextArea && ['POST', 'PUT', 'PATCH'].includes(method)) {
-      bodyTextArea.value = JSON.stringify(
-        {
-          name: 'Sample Pet',
-          status: 'available',
-          category: { id: 1, name: 'Dogs' },
-          photoUrls: ['https://example.com/photo1.jpg'],
-          tags: [{ id: 1, name: 'friendly' }],
-        },
-        null,
-        2
-      );
+      try {
+        console.group('testEndpoint Debug Info');
+        
+        // Use the tracked current spec ID
+        const specId = this.currentSpecId;
+        
+        console.log('Current specId:', specId);
+        
+        if (!specId) {
+          console.error('No spec currently selected');
+          console.groupEnd();
+          throw new Error('No specification selected. Please select a spec first by clicking "View Endpoints".');
+        }
 
+        // Use the original path (without /api/mock prefix) for schema requests
+        const schemaPath = originalPath || fullPath.replace(/^\/api\/mock/, '');
+        console.log('Fetching schema for:', { specId, method, schemaPath });
+        
+        // Make sure path starts with a slash and is properly encoded
+        const normalizedPath = schemaPath.startsWith('/') ? schemaPath : `/${schemaPath}`;
+        const encodedPath = encodeURIComponent(normalizedPath).replace(/%2F/g, '/');
+        // Remove leading slash to prevent double slash in URL
+        const cleanPath = encodedPath.startsWith('/') ? encodedPath.substring(1) : encodedPath;
+        const url = `${this.baseURL}/specs/${specId}/operations/${method}/${cleanPath}/request-schema`;
+        console.log('Fetching schema from URL:', url);
+        
+        // Fetch the request schema
+        let response: Response;
+        let schema: any;
+        
+        try {
+          console.log('Sending request to:', url);
+          response = await fetch(url);
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Schema fetch failed:', { 
+              status: response.status, 
+              statusText: response.statusText, 
+              errorText 
+            });
+            
+            // Try to get a more specific error message
+            let errorMessage = `Failed to load schema: ${response.statusText}`;
+            try {
+              const errorData = JSON.parse(errorText);
+              if (errorData.error) {
+                errorMessage += ` - ${errorData.error}`;
+                if (errorData.availablePaths) {
+                  console.log('Available paths in spec:', errorData.availablePaths);
+                }
+              }
+            } catch (e) {
+              console.log('Could not parse error response:', e);
+            }
+            
+            throw new Error(errorMessage);
+          }
+          
+          schema = await response.json();
+          console.log('Received schema:', JSON.stringify(schema, null, 2));
+          
+          // Call backend to generate mock data from schema
+          console.log('Requesting mock data generation from backend...');
+          const mockResponse = await fetch('/api/ai/generate-from-schema', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ schema })
+          });
+          
+          if (!mockResponse.ok) {
+            throw new Error(`Failed to generate mock data: ${mockResponse.statusText}`);
+          }
+          
+          const mockBody = await mockResponse.json();
+          console.log('Generated mock data:', mockBody);
+          
+          // Set the generated data in the textarea
+          const mockJson = JSON.stringify(mockBody, null, 2);
+          console.log('Setting textarea value to:', mockJson);
+          bodyTextArea.value = mockJson;
+          
+        } catch (error) {
+          console.error('Error generating mock data:', error);
+          console.groupEnd();
+          throw error;
+        }
+      } catch (error) {
+        console.error('Failed to generate request body:', error);
+        bodyTextArea.value = '';
+        alert('Failed to generate request body from schema. Please check the console for details.');
+      }
+      
       bodyTextArea.focus();
       if (responseContainer) {
-        responseContainer.innerHTML = this.createReadyToTestHTML('POST');
+        responseContainer.innerHTML = this.createReadyToTestHTML(method);
       }
     } else {
       if (bodyTextArea) bodyTextArea.value = '';
       if (pathInput) pathInput.focus();
       if (responseContainer) {
-        responseContainer.innerHTML = this.createReadyToTestHTML('GET');
+        responseContainer.innerHTML = this.createReadyToTestHTML(method);
       }
     }
   }
@@ -727,7 +670,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
         };
 
         alert(
-          `✅ Specification "${spec.name}" imported successfully!\n\n📊 Found ${spec.endpoint_count} endpoints\n\n💡 Next steps:\n1. Click "View Imported Specs" to see your endpoints\n2. Use "Quick Test" to test individual endpoints\n3. Your endpoints are now available for testing!`
+          `Specification "${spec.name}" imported successfully!\n\nFound ${spec.endpoint_count} endpoints\n\nNext steps:\n1. Click "View Imported Specs" to see your endpoints\n2. Use "Quick Test" to test individual endpoints\n3. Your endpoints are now available for testing!`
         );
 
         this.closeSpecModal();
@@ -795,30 +738,6 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
     }
   }
 
-  private createDynamicSection(id: string, title: string, content: string): HTMLDivElement {
-    const section = document.createElement('div');
-    section.id = id;
-    section.className = 'section dynamic-section';
-    section.innerHTML = `
-      <div class="section-header">
-        <h2>${title}</h2>
-        <button class="close-section-btn" onclick="window.apiSandbox.closeDynamicSection('${id}')">&times;</button>
-      </div>
-      ${content}
-    `;
-    return section;
-  }
-
-  private createResponseHTML(title: string, data: any, statusClass: string = 'success'): string {
-    return `
-      <div class="response-header">
-        <span class="response-status ${statusClass}">${title}</span>
-        <small style="color: #6c757d;">${new Date().toLocaleTimeString()}</small>
-      </div>
-      <div class="response-json">${JSON.stringify(data, null, 2)}</div>
-    `;
-  }
-
   private createErrorHTML(title: string, message: string): string {
     return `
       <div class="response-header">
@@ -832,9 +751,9 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
 
   private createReadyToTestHTML(method: string): string {
     const message =
-      method === 'POST'
-        ? '💡 Modify the JSON payload above and click "Send Request" to test this POST endpoint.'
-        : '💡 Click "Send Request" to test this GET endpoint.';
+      method === 'POST' || method === 'PUT' || method === 'PATCH'
+        ? `Modify the JSON payload above and click "Send Request" to test this ${method} endpoint.`
+        : `Click "Send Request" to test this GET endpoint.`;
 
     return `
       <div class="response-header">
@@ -862,6 +781,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
       section.remove();
     }
   }
+
 }
 
 const apiSandbox = new APISandboxApp();

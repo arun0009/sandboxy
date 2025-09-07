@@ -17,7 +17,6 @@ const config = {
   defaultDelay: parseInt(process.env.MOCK_DELAY || '0', 10),
   defaultMockMode: ['ai', 'advanced'].includes(process.env.MOCK_MODE as any) ? process.env.MOCK_MODE as 'ai' | 'advanced' : 'advanced',
   enableMockMetadata: process.env.ENABLE_MOCK_METADATA !== 'false',
-  seedData: process.env.SEED_DATA === 'true',
 };
 
 // Get all specs
@@ -273,6 +272,140 @@ router.delete('/environments/:envId', async (req: Request, res: Response<APIResp
     res.status(500).json({
       success: false,
       error: 'Failed to delete environment',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Get request schema for a specific operation
+router.get('/:specId/operations/:method/:path*/request-schema', async (req: Request, res: Response<APIResponse>) => {
+  try {
+    const { specId, method, path } = req.params;
+    const spec = await storage.getSpec(specId);
+    
+    if (!spec) {
+      return res.status(404).json({
+        success: false,
+        error: 'Specification not found',
+      });
+    }
+
+    const httpMethod = method.toLowerCase();
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    
+    // Find the operation in the OpenAPI spec
+    const pathItem = spec.spec_data.paths[normalizedPath];
+    if (!pathItem) {
+      return res.status(404).json({
+        success: false,
+        error: `Path ${normalizedPath} not found in specification`,
+        availablePaths: Object.keys(spec.spec_data.paths),
+      });
+    }
+
+    const operation = pathItem[httpMethod as keyof typeof pathItem];
+    if (!operation) {
+      return res.status(404).json({
+        success: false,
+        error: `Method ${method.toUpperCase()} not found for path ${normalizedPath}`,
+        availableMethods: Object.keys(pathItem),
+      });
+    }
+
+    // Helper function to resolve $ref
+    const resolveRef = (ref: string): any => {
+      if (!ref.startsWith('#/components/schemas/')) {
+        return null;
+      }
+      const schemaName = ref.replace('#/components/schemas/', '');
+      return spec.spec_data.components?.schemas?.[schemaName] || null;
+    };
+
+    // Helper function to resolve schema recursively
+    const resolveSchema = (schema: any): any => {
+      if (!schema) return null;
+      
+      if (schema.$ref) {
+        const resolved = resolveRef(schema.$ref);
+        return resolved ? resolveSchema(resolved) : schema;
+      }
+      
+      if (schema.type === 'object' && schema.properties) {
+        const resolvedProperties: any = {};
+        for (const [key, prop] of Object.entries(schema.properties)) {
+          resolvedProperties[key] = resolveSchema(prop);
+        }
+        return {
+          ...schema,
+          properties: resolvedProperties
+        };
+      }
+      
+      if (schema.type === 'array' && schema.items) {
+        return {
+          ...schema,
+          items: resolveSchema(schema.items)
+        };
+      }
+      
+      return schema;
+    };
+
+    // Extract request body schema
+    let requestSchema: any = null;
+    
+    if (operation.requestBody) {
+      const requestBody = operation.requestBody;
+      
+      // Handle $ref in requestBody
+      if ('$ref' in requestBody) {
+        const resolved = resolveRef(requestBody.$ref as string);
+        requestSchema = resolved ? resolveSchema(resolved) : null;
+      } else if (requestBody.content) {
+        // Look for JSON content type
+        const jsonContent = requestBody.content['application/json'] || 
+                           requestBody.content['application/x-www-form-urlencoded'] ||
+                           Object.values(requestBody.content)[0];
+        
+        if (jsonContent && jsonContent.schema) {
+          requestSchema = resolveSchema(jsonContent.schema);
+        }
+      }
+    }
+
+    // If no request body schema found, create a basic one based on common patterns
+    if (!requestSchema) {
+      if (['POST', 'PUT', 'PATCH'].includes(method.toUpperCase())) {
+        // Generate a basic schema for data modification operations
+        requestSchema = {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string' },
+            description: { type: 'string' },
+            createdAt: { type: 'string', format: 'date-time' }
+          },
+          required: ['name']
+        };
+      } else {
+        // For GET, DELETE, etc., no request body expected
+        return res.status(200).json({
+          success: true,
+          data: null,
+          message: `${method.toUpperCase()} operations typically don't have request bodies`
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: requestSchema,
+    });
+  } catch (error) {
+    console.error('Error getting request schema:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get request schema',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
   }

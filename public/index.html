@@ -476,46 +476,10 @@
                 <button class="btn" id="import-spec-btn">Import Specification</button>
                 <button class="btn" id="view-specs-btn">View Imported Specs</button>
             </div>
-            
             <div class="card">
-                <h3>Mock Server</h3>
-                <p><strong>What:</strong> Runs actual HTTP mock servers from your specs<br>
-                <strong>Why:</strong> Provides real endpoints you can call - handles routing, responses, CORS</p>
-                <button class="btn" id="mockoon-status-btn">Check Status</button>
-            </div>
-            
-            
-            <div class="card">
-                <h3>Monitor & Debug</h3>
-                <p><strong>What:</strong> View API calls, response times, error rates<br>
-                <strong>Why:</strong> Debug issues and understand usage patterns</p>
-                <button class="btn" id="monitor-btn">View Logs</button>
-            </div>
-            
-            <div class="card">
-                <h3>API Tester</h3>
-                <p>Test any endpoint with custom requests and see responses</p>
-                <button class="btn" id="quick-test-btn">Quick Test</button>
-            </div>
-        </div>
-        
-        <div class="status">
-            <h3>System Status</h3>
-            <div class="status-item">
-                <span>Backend Server</span>
-                <span class="status-badge success">Running</span>
-            </div>
-            <div class="status-item">
-                <span>Database</span>
-                <span class="status-badge success">Connected</span>
-            </div>
-            <div class="status-item">
-                <span>Mockoon CLI</span>
-                <span class="status-badge" id="mockoon-status">Checking...</span>
-            </div>
-            <div class="status-item">
-                <span>AI Enhancement</span>
-                <span class="status-badge" id="ai-status">Checking...</span>
+                <h3>Database Admin</h3>
+                <p>View and manage all imported specs, mock data, and system settings</p>
+                <a href="/admin" class="btn">Open Admin Panel</a>
             </div>
         </div>
         
@@ -552,13 +516,12 @@
             </div>
             <div id="testResponse" class="response-area"></div>
         </div>
-        
     </div>
 
     <!-- Modal for importing specs -->
     <div id="specModal" class="modal">
         <div class="modal-content">
-            <span class="close" id="close-modal-btn">&times;</span>
+            <button class="close" id="close-modal-btn">&times;</button>
             <h2>Import API Specification</h2>
             <p><strong>Supported formats:</strong> JSON, YAML (.yml, .yaml)</p>
             <form id="specForm">
@@ -579,6 +542,6 @@
         </div>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <script type="module" src="public/app.js"></script>
 </body>
 </html>

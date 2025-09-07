@@ -1,0 +1,204 @@
+{
+  "/pet/9830": {
+    "id": 9830,
+    "name": "Cooper Jaiswal",
+    "category": {
+      "id": 1,
+      "name": "Dogs"
+    },
+    "photoUrls": [
+      "https://example.com/photo1.jpg"
+    ],
+    "tags": [
+      {
+        "id": 1,
+        "name": "friendly"
+      }
+    ],
+    "status": "unavailable",
+    "createdAt": "2025-09-06T20:23:10.462Z",
+    "updatedAt": "2025-09-06T20:23:10.462Z"
+  },
+  "/pet": [
+    {
+      "id": 9830,
+      "name": "Cooper Jaiswal",
+      "category": {
+        "id": 1,
+        "name": "Dogs"
+      },
+      "photoUrls": [
+        "https://example.com/photo1.jpg"
+      ],
+      "tags": [
+        {
+          "id": 1,
+          "name": "friendly"
+        }
+      ],
+      "status": "unavailable",
+      "createdAt": "2025-09-06T20:23:10.462Z",
+      "updatedAt": "2025-09-06T20:23:10.462Z"
+    },
+    {
+      "name": "Little",
+      "photoUrls": [],
+      "tags": [],
+      "status": "unavailable",
+      "id": 156336,
+      "createdAt": "2025-09-06T21:16:24.438Z",
+      "updatedAt": "2025-09-06T21:16:24.438Z"
+    },
+    {
+      "name": "Anne MacGyver-Torp",
+      "photoUrls": [
+        "https://windy-volleyball.name",
+        "https://gruesome-vanadyl.info",
+        "https://prickly-handover.info",
+        "https://cautious-laughter.net/",
+        "https://nutritious-planula.biz"
+      ],
+      "id": 921475,
+      "category": {
+        "id": 303235,
+        "name": "Robyn Stokes"
+      },
+      "tags": [
+        {
+          "id": 235148,
+          "name": "Ivan Thiel"
+        },
+        {
+          "id": 162924,
+          "name": "Rodney Hickle"
+        }
+      ],
+      "status": "sold",
+      "createdAt": "2025-09-07T05:48:51.526Z",
+      "updatedAt": "2025-09-07T05:48:51.526Z"
+    },
+    {
+      "name": "Dr. Perry Dickinson",
+      "photoUrls": [
+        "https://bleak-hydrant.net",
+        "https://natural-dish.biz",
+        "https://other-dream.name",
+        "https://agreeable-following.biz/"
+      ],
+      "id": 872199,
+      "category": {
+        "id": 45385,
+        "name": "Maurice Wiegand"
+      },
+      "tags": [
+        {
+          "id": 387035,
+          "name": "Mr. Brandon Kshlerin-McGlynn"
+        },
+        {
+          "id": 874699,
+          "name": "Bobbie Kuphal"
+        },
+        {
+          "id": 710156,
+          "name": "Leo Sipes"
+        },
+        {
+          "id": 825302,
+          "name": "Mrs. Madeline Prohaska-Hartmann"
+        }
+      ],
+      "status": "sold",
+      "createdAt": "2025-09-07T05:59:11.280Z",
+      "updatedAt": "2025-09-07T05:59:11.280Z"
+    }
+  ],
+  "/pet/findByStatus": [
+    null,
+    null
+  ],
+  "/pet/findByTags": [
+    null,
+    null,
+    null,
+    null,
+    null
+  ],
+  "/pet/{petId}": null,
+  "/store/inventory": {},
+  "/store/order/{orderId}": null,
+  "/user/login": "tantum vit",
+  "/user/{username}": null,
+  "/pet/156336": {
+    "name": "Little",
+    "photoUrls": [],
+    "tags": [],
+    "status": "unavailable",
+    "id": 156336,
+    "createdAt": "2025-09-06T21:16:24.438Z",
+    "updatedAt": "2025-09-06T21:16:24.438Z"
+  },
+  "/pet/921475": {
+    "name": "Anne MacGyver-Torp",
+    "photoUrls": [
+      "https://windy-volleyball.name",
+      "https://gruesome-vanadyl.info",
+      "https://prickly-handover.info",
+      "https://cautious-laughter.net/",
+      "https://nutritious-planula.biz"
+    ],
+    "id": 921475,
+    "category": {
+      "id": 303235,
+      "name": "Robyn Stokes"
+    },
+    "tags": [
+      {
+        "id": 235148,
+        "name": "Ivan Thiel"
+      },
+      {
+        "id": 162924,
+        "name": "Rodney Hickle"
+      }
+    ],
+    "status": "sold",
+    "createdAt": "2025-09-07T05:48:51.526Z",
+    "updatedAt": "2025-09-07T05:48:51.526Z"
+  },
+  "/pet/872199": {
+    "name": "Dr. Perry Dickinson",
+    "photoUrls": [
+      "https://bleak-hydrant.net",
+      "https://natural-dish.biz",
+      "https://other-dream.name",
+      "https://agreeable-following.biz/"
+    ],
+    "id": 872199,
+    "category": {
+      "id": 45385,
+      "name": "Maurice Wiegand"
+    },
+    "tags": [
+      {
+        "id": 387035,
+        "name": "Mr. Brandon Kshlerin-McGlynn"
+      },
+      {
+        "id": 874699,
+        "name": "Bobbie Kuphal"
+      },
+      {
+        "id": 710156,
+        "name": "Leo Sipes"
+      },
+      {
+        "id": 825302,
+        "name": "Mrs. Madeline Prohaska-Hartmann"
+      }
+    ],
+    "status": "sold",
+    "createdAt": "2025-09-07T05:59:11.280Z",
+    "updatedAt": "2025-09-07T05:59:11.280Z"
+  }
+}

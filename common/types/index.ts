@@ -14,6 +14,10 @@ export interface APIResponse<T = any> {
   readonly message?: string;
   readonly status?: number;
   readonly statusText?: string;
+  // Allow additional debugging properties
+  readonly availablePaths?: string[];
+  readonly availableMethods?: string[];
+  readonly [key: string]: any;
 }
 
 // Branded types for better type safety
@@ -48,10 +52,6 @@ export interface EndpointData {
   readonly description?: string;
 }
 
-// Mockoon status with discriminated unions
-export type MockoonStatus = 
-  | { readonly available: true; readonly runningInstances: number; readonly error?: never }
-  | { readonly available: false; readonly runningInstances: 0; readonly error: string };
 
 // Generation modes with strict typing
 export interface GenerationMode {
@@ -180,6 +180,18 @@ export interface Response {
 
 export interface MediaType {
   schema: OpenAPISchema;
+  encoding?: {
+    [key: string]: {
+      contentType?: string;
+      headers?: {
+        [key: string]: {
+          description?: string;
+        };
+      };
+      style?: string;
+      explode?: boolean;
+    };
+  };
 }
 
 // Mockoon Types (from your index.ts)
@@ -234,7 +246,7 @@ export interface MockoonResponse {
 
 // Additional types from your index.ts
 export interface GenerationContext {
-  generationMode?: 'ai' | 'advanced';
+  generationMode?: 'ai' | 'advanced' | 'basic';
   scenarioType?: 'realistic' | 'edge_case' | 'varied';
   endpoint?: string;
   method?: string;

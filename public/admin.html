@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Sandbox - Admin Panel</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #4a5568;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .nav-btn {
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.9);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .nav-btn:hover {
+            background: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .nav-btn.active {
+            background: #4299e1;
+            color: white;
+        }
+
+        .section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        .section h2 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            opacity: 0.9;
+            font-size: 0.9rem;
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th {
+            background: #4a5568;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .json-preview {
+            max-width: 300px;
+            max-height: 100px;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8rem;
+            background: #f7fafc;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .json-preview:hover {
+            background: #edf2f7;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-danger {
+            background: #e53e3e;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c53030;
+        }
+
+        .btn-info {
+            background: #3182ce;
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #2c5282;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .error {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #718096;
+        }
+
+        .empty-state h3 {
+            margin-bottom: 10px;
+            color: #4a5568;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #4299e1;
+            text-decoration: none;
+            font-weight: 600;
+            margin-bottom: 20px;
+            transition: color 0.2s ease;
+        }
+
+        .back-link:hover {
+            color: #3182ce;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="http://localhost:3001/" class="back-link">← Back to API Sandbox</a>
+            <h1>Admin Panel</h1>
+            <p>Manage your API specifications, mock data, and system settings</p>
+        </div>
+
+        <div class="nav-buttons">
+            <button class="nav-btn active" onclick="showSection('overview')">Overview</button>
+            <button class="nav-btn" onclick="showSection('specs')">API Specs</button>
+            <button class="nav-btn" onclick="showSection('mocks')">Mock Data</button>
+            <button class="nav-btn" onclick="showSection('settings')">Settings</button>
+        </div>
+
+        <div id="overview" class="section active">
+            <h2>System Overview</h2>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-number" id="specs-count">-</div>
+                    <div class="stat-label">API Specifications</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="mocks-count">-</div>
+                    <div class="stat-label">Mock Responses</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="endpoints-count">-</div>
+                    <div class="stat-label">Total Endpoints</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="storage-size">-</div>
+                    <div class="stat-label">Storage Used</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="specs" class="section">
+            <h2>API Specifications</h2>
+            <div id="specs-content">
+                <div class="loading">Loading specifications...</div>
+            </div>
+        </div>
+
+        <div id="mocks" class="section">
+            <h2>Mock Data</h2>
+            <div id="mocks-content">
+                <div class="loading">Loading mock data...</div>
+            </div>
+        </div>
+
+        <div id="settings" class="section">
+            <h2>System Settings</h2>
+            <div id="settings-content">
+                <div class="loading">Loading settings...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = {
+            specs: [],
+            mocks: [],
+            settings: {}
+        };
+
+        // Navigation
+        function showSection(sectionName) {
+            // Update nav buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Update sections
+            document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+            document.getElementById(sectionName).classList.add('active');
+
+            // Load data if needed
+            if (sectionName !== 'overview') {
+                loadSectionData(sectionName);
+            }
+        }
+
+        // Load data for specific section
+        async function loadSectionData(section) {
+            try {
+                const response = await fetch(`/api/admin/${section}`);
+                const data = await response.json();
+                
+                currentData[section] = data;
+                renderSection(section, data);
+            } catch (error) {
+                document.getElementById(`${section}-content`).innerHTML = 
+                    `<div class="error">Failed to load ${section}: ${error.message}</div>`;
+            }
+        }
+
+        // Render section content
+        function renderSection(section, data) {
+            const container = document.getElementById(`${section}-content`);
+            
+            switch (section) {
+                case 'specs':
+                    renderSpecs(container, data);
+                    break;
+                case 'mocks':
+                    renderMocks(container, data);
+                    break;
+                case 'settings':
+                    renderSettings(container, data);
+                    break;
+            }
+        }
+
+        // Render specs table
+        function renderSpecs(container, specs) {
+            if (!specs || specs.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No API Specifications</h3>
+                        <p>Import your first OpenAPI specification to get started</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const table = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>ID</th>
+                                <th>Endpoints</th>
+                                <th>Created</th>
+                                <th>Updated</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${specs.map(spec => `
+                                <tr>
+                                    <td><strong>${spec.name}</strong></td>
+                                    <td><code>${spec.id}</code></td>
+                                    <td>${countEndpoints(spec.content)}</td>
+                                    <td>${formatDate(spec.createdAt)}</td>
+                                    <td>${formatDate(spec.updatedAt)}</td>
+                                    <td class="actions">
+                                        <button class="btn btn-info" onclick="viewSpec('${spec.id}')">View</button>
+                                        <button class="btn btn-danger" onclick="deleteSpec('${spec.id}')">Delete</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = table;
+        }
+
+        // Render mocks table
+        function renderMocks(container, mocks) {
+            if (!mocks || mocks.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No Mock Data</h3>
+                        <p>Mock responses will appear here after API testing</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const table = `
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Endpoint</th>
+                                <th>Method</th>
+                                <th>Status</th>
+                                <th>Spec ID</th>
+                                <th>Response Preview</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${mocks.map(mock => `
+                                <tr>
+                                    <td><code>${mock.endpoint}</code></td>
+                                    <td><span class="method-${mock.method.toLowerCase()}">${mock.method}</span></td>
+                                    <td><span class="status-${mock.statusCode}">${mock.statusCode}</span></td>
+                                    <td><code>${mock.specId}</code></td>
+                                    <td>
+                                        <div class="json-preview" onclick="viewMockResponse('${mock.id}')">
+                                            ${JSON.stringify(mock.response, null, 2).substring(0, 100)}...
+                                        </div>
+                                    </td>
+                                    <td>${formatDate(mock.createdAt)}</td>
+                                    <td class="actions">
+                                        <button class="btn btn-info" onclick="viewMockResponse('${mock.id}')">View</button>
+                                        <button class="btn btn-danger" onclick="deleteMock('${mock.id}')">Delete</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            container.innerHTML = table;
+        }
+
+        // Render settings
+        function renderSettings(container, settings) {
+            const settingsHtml = `
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label>Auto Mock</label>
+                        <input type="checkbox" ${settings.autoMock ? 'checked' : ''} 
+                               onchange="updateSetting('autoMock', this.checked)">
+                    </div>
+                    <div class="setting-item">
+                        <label>Default Delay (ms)</label>
+                        <input type="number" value="${settings.defaultDelay || 100}" 
+                               onchange="updateSetting('defaultDelay', parseInt(this.value))">
+                    </div>
+                </div>
+            `;
+            container.innerHTML = settingsHtml;
+        }
+
+        // Utility functions
+        function countEndpoints(spec) {
+            if (!spec || !spec.paths) return 0;
+            return Object.keys(spec.paths).reduce((count, path) => {
+                return count + Object.keys(spec.paths[path]).length;
+            }, 0);
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleString();
+        }
+
+        // Action handlers
+        async function deleteSpec(id) {
+            if (!confirm('Are you sure you want to delete this specification?')) return;
+            
+            try {
+                await fetch(`/api/admin/specs/${id}`, { method: 'DELETE' });
+                loadSectionData('specs');
+                loadOverview();
+            } catch (error) {
+                alert('Failed to delete specification: ' + error.message);
+            }
+        }
+
+        async function deleteMock(id) {
+            if (!confirm('Are you sure you want to delete this mock response?')) return;
+            
+            try {
+                await fetch(`/api/admin/mocks/${id}`, { method: 'DELETE' });
+                loadSectionData('mocks');
+                loadOverview();
+            } catch (error) {
+                alert('Failed to delete mock: ' + error.message);
+            }
+        }
+
+        function viewSpec(id) {
+            const spec = currentData.specs.find(s => s.id === id);
+            if (spec) {
+                const newWindow = window.open('', '_blank');
+                newWindow.document.write(`
+                    <html>
+                        <head><title>API Spec: ${spec.name}</title></head>
+                        <body>
+                            <h1>${spec.name}</h1>
+                            <pre>${JSON.stringify(spec.content, null, 2)}</pre>
+                        </body>
+                    </html>
+                `);
+            }
+        }
+
+        function viewMockResponse(id) {
+            const mock = currentData.mocks.find(m => m.id === id);
+            if (mock) {
+                const newWindow = window.open('', '_blank');
+                newWindow.document.write(`
+                    <html>
+                        <head><title>Mock Response: ${mock.method} ${mock.endpoint}</title></head>
+                        <body>
+                            <h1>${mock.method} ${mock.endpoint}</h1>
+                            <h2>Status: ${mock.statusCode}</h2>
+                            <pre>${JSON.stringify(mock.response, null, 2)}</pre>
+                        </body>
+                    </html>
+                `);
+            }
+        }
+
+        async function updateSetting(key, value) {
+            try {
+                await fetch('/api/admin/settings', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [key]: value })
+                });
+            } catch (error) {
+                alert('Failed to update setting: ' + error.message);
+            }
+        }
+
+        // Load overview data
+        async function loadOverview() {
+            try {
+                const [specsRes, mocksRes] = await Promise.all([
+                    fetch('/api/admin/specs'),
+                    fetch('/api/admin/mocks')
+                ]);
+                
+                const specs = await specsRes.json();
+                const mocks = await mocksRes.json();
+                
+                document.getElementById('specs-count').textContent = specs.length;
+                document.getElementById('mocks-count').textContent = mocks.length;
+                
+                const totalEndpoints = specs.reduce((count, spec) => count + countEndpoints(spec.content), 0);
+                document.getElementById('endpoints-count').textContent = totalEndpoints;
+                
+                // Estimate storage size
+                const storageSize = JSON.stringify({ specs, mocks }).length;
+                document.getElementById('storage-size').textContent = formatBytes(storageSize);
+                
+            } catch (error) {
+                console.error('Failed to load overview:', error);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadOverview();
+        });
+    </script>
+</body>
+</html>

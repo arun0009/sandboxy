@@ -265,7 +265,7 @@ test.describe('Smart API Sandbox - End-to-End Mock Workflow', () => {
   });
 
   test('comprehensive workflow: Import → POST → GET → Verify persistence', async ({ page, request }) => {
-    console.log('🚀 Starting comprehensive workflow test...');
+    console.log('Starting comprehensive workflow test...');
     
     // Step 1: Import API specification
     const specPath = path.join(__dirname, '../sample-specs/petstore-api.json');
