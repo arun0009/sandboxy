@@ -185,7 +185,11 @@ router.all('/*', async (req: Request, res: Response) => {
     if (['POST', 'PUT', 'PATCH'].includes(method)) {
       const schema = matchingRoute.operation.responses?.['200']?.content?.['application/json']?.schema ||
                     matchingRoute.operation.responses?.['201']?.content?.['application/json']?.schema;
-      const context: GenerationContext = { generationMode: mockMode };
+      const context: GenerationContext = { 
+        generationMode: mockMode,
+        endpoint: `${method} ${matchingRoute.path}`
+      };
+      console.log('Generating mock data with context:', context);
       const mockResponse = schema
         ? await dataGenerator.generateData(schema, context, mockMode)
         : { message: `Mock response for ${method} ${requestPath}` };
@@ -313,7 +317,11 @@ router.all('/*', async (req: Request, res: Response) => {
       try {
         const schema = matchingRoute.operation.responses?.['200']?.content?.['application/json']?.schema ||
                       matchingRoute.operation.responses?.['201']?.content?.['application/json']?.schema;
-        const context: GenerationContext = { generationMode: mockMode };
+        const context: GenerationContext = { 
+        generationMode: mockMode,
+        endpoint: `${method} ${matchingRoute.path}`
+      };
+      console.log('Generating mock data with context:', context);
         if (schema) {
           console.log(`Using ${mockMode} generation for ${method} ${requestPath}`);
           responseData = await dataGenerator.generateData(schema, context, mockMode);

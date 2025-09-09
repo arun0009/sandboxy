@@ -409,14 +409,31 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
           schema = await response.json();
           //console.log('Received schema:', JSON.stringify(schema, null, 2));
           
-          // Call backend to generate mock data from schema
-          console.log('Requesting mock data generation from backend...');
+          // Get the current endpoint info from the form
+          const elements = this.getTestFormElements();
+          if (!elements.success) {
+            throw new Error('Could not access form elements');
+          }
+          
+          const { methodSelect, pathInput } = elements.data;
+          const endpointInfo = {
+            method: methodSelect.value,
+            path: pathInput.value
+          };
+          
+          console.log('Requesting mock data generation from backend for endpoint:', endpointInfo);
           const mockResponse = await fetch('/api/ai/generate-from-schema', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ schema })
+            body: JSON.stringify({ 
+              schema,
+              context: {
+                endpoint: `${endpointInfo.method} ${endpointInfo.path}`,
+                originalEndpoint: endpointInfo
+              }
+            })
           });
           
           if (!mockResponse.ok) {

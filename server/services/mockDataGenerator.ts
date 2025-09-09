@@ -7,6 +7,8 @@ import {
   GenerationContext,
   TestScenario,
 } from "../../common/types";
+import { getCustomFakers } from "../customFakers/registry";
+
 
 // --- Types ---
 type Faker = typeof faker;
@@ -96,9 +98,23 @@ export class MockDataGenerator {
   async generateData(
     schema: OpenAPISchema,
     context: GenerationContext = {},
-    mode?: "ai" | "advanced"
+    mode?: "ai" | "advanced" | "basic"
   ): Promise<any> {
-    const generationMode = mode || this.defaultMode;
+    console.log('=== MockDataGenerator.generateData() called ===');
+    console.log('Schema type:', typeof schema);
+    console.log('Context:', JSON.stringify(context, null, 2));
+    console.log('Mode parameter:', mode);
+    
+    const generationMode = mode || context.generationMode || this.defaultMode;
+    console.log('Final generation mode:', generationMode);
+
+    // Log the endpoint if available in context
+    if (context.endpoint) {
+      console.log(`Generating data for endpoint: ${context.endpoint}`);
+      console.log(`Using generation mode: ${generationMode}`);
+    } else {
+      console.log('No endpoint found in context');
+    }
 
     if (generationMode === "ai" && this.openai) {
       try {
@@ -123,37 +139,46 @@ export class MockDataGenerator {
       // Required properties
       required.forEach((key) => {
         const prop = schema.properties![key];
-        if (prop && !prop.readOnly) result[key] = this.generateValue(prop, key);
+        if (prop && !prop.readOnly) result[key] = this.generateValue(prop, key, context);
       });
 
       // Optional properties
       propertyKeys.forEach((key) => {
         if (!required.includes(key)) {
           const prop = schema.properties![key];
-          if (prop && !prop.readOnly) result[key] = this.generateValue(prop, key);
+          if (prop && !prop.readOnly) result[key] = this.generateValue(prop, key, context);
         }
       });
 
       return result;
     }
 
-    return this.generateValue(schema, "");
+    return this.generateValue(schema, "", context);
   }
 
-  private generateValue(schema: OpenAPISchema, propertyName: string = ""): any {
+  private generateValue(schema: OpenAPISchema, propertyName: string = "", context: GenerationContext = {}): any {
     if (schema.const !== undefined) return schema.const;
     if (schema.enum && schema.enum.length > 0) return faker.helpers.arrayElement(schema.enum);
+
+      // --- custom endpoint-specific fakers ---
+  if (context.endpoint) {
+    const fakers = getCustomFakers(context.endpoint);
+    for (const custom of fakers) {
+      const val = custom(propertyName, `${schema.type || ""} ${schema.format || ""}`);
+      if (val !== undefined) return val;
+    }
+  }
 
     if (schema.type === "array" && schema.items) {
       const minItems = schema.minItems ?? 1;
       const maxItems = schema.maxItems ?? 5;
       return Array.from(
         { length: faker.number.int({ min: minItems, max: maxItems }) },
-        () => this.generateValue(schema.items as OpenAPISchema, propertyName)
+        () => this.generateValue(schema.items as OpenAPISchema, propertyName, context)
       );
     }
 
-    if (schema.type === "object" && schema.properties) return this.generateAdvanced(schema);
+    if (schema.type === "object" && schema.properties) return this.generateAdvanced(schema, context);
 
     const contextInfo = `${schema.type || ""} ${schema.format || ""} ${propertyName}`.toLowerCase();
 

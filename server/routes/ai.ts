@@ -1,7 +1,17 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import MockDataGenerator from '../services/mockDataGenerator';
 import { OpenAPISchema, GenerationContext, GenerationMode } from '../../common/types';
+
+// Simple type definitions to avoid TypeScript errors
+type Request = express.Request & {
+  body: any;
+};
+
+type Response = express.Response & {
+  status: (code: number) => Response;
+  json: (body: any) => Response;
+};
 
 const router = express.Router();
 const dataGenerator = new MockDataGenerator();
@@ -32,7 +42,7 @@ const isAIAvailable = (): boolean => {
 };
 
 // Generate smart mock data for an endpoint
-router.post('/generate-data', async (req: Request<{}, any, GenerateDataRequest>, res: Response) => {
+router.post('/generate-data', async (req: Request, res: Response) => {
   try {
     const { schema, context = {}, generationMode = 'advanced' } = req.body;
     
@@ -68,7 +78,7 @@ router.post('/generate-data', async (req: Request<{}, any, GenerateDataRequest>,
 });
 
 // Generate test scenarios for multiple endpoints
-router.post('/generate-scenarios', async (req: Request<{}, any, GenerateScenariosRequest>, res: Response) => {
+router.post('/generate-scenarios', async (req: Request, res: Response) => {
   try {
     const { endpoints, generationMode = 'advanced' } = req.body;
     
@@ -117,7 +127,7 @@ router.post('/generate-scenarios', async (req: Request<{}, any, GenerateScenario
 });
 
 // Smart response enhancement based on context
-router.post('/enhance-response', async (req: Request<{}, any, EnhanceResponseRequest>, res: Response) => {
+router.post('/enhance-response', async (req: Request, res: Response) => {
   try {
     const { schema, baseResponse, context = {} } = req.body;
     
@@ -185,10 +195,21 @@ router.get('/status', async (req: Request, res: Response) => {
   }
 });
 
+// Define interface for generate-from-schema request
+interface GenerateFromSchemaRequest {
+  schema: any;
+  context?: GenerationContext & {
+    originalEndpoint?: {
+      method: string;
+      path: string;
+    };
+  };
+}
+
 // Generate mock data from schema endpoint
 router.post('/generate-from-schema', async (req: Request, res: Response) => {
   try {
-    const { schema } = req.body;
+    const { schema, context = {} } = req.body;
     
     if (!schema) {
       return res.status(400).json({ error: 'Schema is required' });
@@ -197,9 +218,22 @@ router.post('/generate-from-schema', async (req: Request, res: Response) => {
     // Extract the actual schema from the API response wrapper
     const actualSchema = schema.data || schema;
     
+    // Use the original endpoint from context if available
+    const endpoint = context.originalEndpoint 
+      ? `${context.originalEndpoint.method} ${context.originalEndpoint.path}`
+      : context.endpoint || 'POST /api/ai/generate-from-schema';
+    
+    const generationContext: GenerationContext = {
+      ...context,
+      endpoint,
+      generationMode: 'advanced' as const
+    };
+    
+    console.log('Generating data with context:', generationContext);
+    
     // Use MockDataGenerator to generate data from schema
     const generator = new MockDataGenerator();
-    const mockData = await generator.generateData(actualSchema);
+    const mockData = await generator.generateData(actualSchema, generationContext);
     
     res.json(mockData);
   } catch (error) {
