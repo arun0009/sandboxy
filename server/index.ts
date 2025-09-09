@@ -1,4 +1,11 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response as ExpressResponse, NextFunction } from 'express';
+type Response = ExpressResponse & {
+  status: (code: number) => Response;
+  send: (body: any) => Response;
+  json: (body: any) => Response;
+  sendFile: (path: string, options?: any, callback?: (err: any) => void) => Response;
+  headersSent: boolean;
+};
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -14,7 +21,6 @@ import mockRoutes from './routes/mock';
 import adminRoutes from './routes/admin';
 
 // Import services
-import database from './services/database';
 import config from './services/config';
 
 // __dirname is available in CommonJS by default
@@ -25,8 +31,6 @@ const server = http.createServer(app);
 // Initialize database
 async function initializeApp() {
   try {
-    await database.init();
-    console.log('Database initialized');
     startServer();
   } catch (error) {
     console.error('Failed to initialize application:', error);
@@ -90,17 +94,19 @@ app.use('/api/admin', adminRoutes);
 // Mock API routing - handle /api/mock/* requests
 app.use('/api/mock', mockRoutes);
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, '../public'), {
-  setHeaders(res: express.Response, path: string) {
-    if (path.endsWith('.js')) {
+// Serve static files from the public directory
+const publicPath = path.join(process.cwd(), 'dist/public');
+app.use(express.static(publicPath, {
+  setHeaders: (res: express.Response, filePath: string) => {
+    if (filePath.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript');
-    } else if (path.endsWith('.css')) {
+    } else if (filePath.endsWith('.css')) {
       res.setHeader('Content-Type', 'text/css');
-    } else if (path.endsWith('.json')) {
-      res.setHeader('Content-Type', 'application/json');
+    } else if (filePath.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html');
     }
-  }
+  },
+  fallthrough: true
 }));
 
 // Admin route
@@ -109,14 +115,24 @@ app.get('/admin', (req: express.Request, res: express.Response) => {
 });
 
 // Serve frontend for all non-API routes
-app.get('*', (req: express.Request, res: express.Response) => {
+app.get('*', (req: Request, res: ExpressResponse) => {
   // Skip API routes
   if (req.path.startsWith('/api/')) {
-    return;
+    return (res as unknown as Response).status(404).json({ error: 'API route not found' });
   }
   
-  // Serve index.html for all other routes to support client-side routing
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  // Serve index.html from dist/public for all other routes to support client-side routing
+  const indexPath = path.join(process.cwd(), 'dist/public/index.html');
+  
+  // Use type assertion to avoid TypeScript errors with sendFile
+  (res as unknown as Response).sendFile(indexPath, (err: any) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      if (!(res as unknown as Response).headersSent) {
+        (res as unknown as Response).status(500).send('Internal Server Error');
+      }
+    }
+  });
 });
 
 // Error handling middleware

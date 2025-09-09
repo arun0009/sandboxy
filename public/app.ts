@@ -407,7 +407,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
           }
           
           schema = await response.json();
-          console.log('Received schema:', JSON.stringify(schema, null, 2));
+          //console.log('Received schema:', JSON.stringify(schema, null, 2));
           
           // Call backend to generate mock data from schema
           console.log('Requesting mock data generation from backend...');
@@ -428,7 +428,7 @@ class APISandboxApp extends TypedEventEmitter<AppEvents> {
           
           // Set the generated data in the textarea
           const mockJson = JSON.stringify(mockBody, null, 2);
-          console.log('Setting textarea value to:', mockJson);
+          //console.log('Setting textarea value to:', mockJson);
           bodyTextArea.value = mockJson;
           
         } catch (error) {

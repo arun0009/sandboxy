@@ -25,7 +25,8 @@
   },
   "include": [
     "server/**/*",
-    "common/**/*"
+    "common/**/*",
+    "src/types/**/*"
   ],
   "exclude": [
     "node_modules",
